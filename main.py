@@ -68,6 +68,7 @@ def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("tomorrow", tomorrow))
+    app.add_handler(CommandHandler("frage", frage))
     app.run_polling()
 
 import dateparser
