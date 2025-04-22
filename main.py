@@ -70,5 +70,50 @@ def main():
     app.add_handler(CommandHandler("tomorrow", tomorrow))
     app.run_polling()
 
+import dateparser
+
+async def frage(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = update.message.text.replace("/frage", "").strip()
+    
+    if not text:
+        await update.message.reply_text("Bitte stell eine Frage, z. B. 'Was ist morgen?'")
+        return
+
+    # Versuche Datum aus dem Text zu extrahieren
+    parsed_date = dateparser.parse(text, languages=['de'])
+
+    if not parsed_date:
+        await update.message.reply_text("❌ Ich konnte kein Datum aus deiner Frage erkennen.")
+        return
+
+    # Anfang und Ende des Tages bestimmen
+    start = datetime.datetime(parsed_date.year, parsed_date.month, parsed_date.day, 0, 0, 0).isoformat() + 'Z'
+    end = datetime.datetime(parsed_date.year, parsed_date.month, parsed_date.day, 23, 59, 59).isoformat() + 'Z'
+
+    # Kalenderabfrage
+    creds = load_credentials()
+    service = build('calendar', 'v3', credentials=creds)
+    events_result = service.events().list(
+        calendarId='primary',
+        timeMin=start,
+        timeMax=end,
+        singleEvents=True,
+        orderBy='startTime'
+    ).execute()
+
+    events = events_result.get('items', [])
+
+    if not events:
+        await update.message.reply_text(f"📅 Keine Termine am {parsed_date.strftime('%d.%m.%Y')}.")
+    else:
+        reply = f"📅 Termine am {parsed_date.strftime('%d.%m.%Y')}:\n\n"
+        for event in events:
+            start_time = event['start'].get('dateTime', event['start'].get('date'))
+            summary = event.get('summary', 'Kein Titel')
+            reply += f"- {start_time}: {summary}\n"
+
+        await update.message.reply_text(reply)
+
+
 if __name__ == '__main__':
     main()
