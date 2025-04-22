@@ -39,7 +39,7 @@ def get_tomorrows_events():
     end = datetime.datetime(tomorrow.year, tomorrow.month, tomorrow.day, 23, 59, 59).isoformat() + 'Z'
 
     events_result =_
-    def start(update, context):
+def start(update, context):
     update.message.reply_text("👋 Hallo! Ich bin dein Kalenderassistent.")
 
 def tomorrow(update, context):
