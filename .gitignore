@@ -1,0 +1,5 @@
+token.pkl
+client_secret_*.json
+.env
+__pycache__/
+*.pyc
