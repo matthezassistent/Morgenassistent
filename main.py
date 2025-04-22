@@ -102,15 +102,18 @@ async def frage(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply += f"- {start_time}: {summary}\n"
 
         await update.message.reply_text(reply)
-
+        
 # MAIN-Funktion
 def main():
     print("👀 Bot gestartet und wartet auf Nachrichten.")
 
     app = ApplicationBuilder().token(BOT_TOKEN).build()
+
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("tomorrow", tomorrow))
-    app.add_handler(CommandHandler("frage", frage))
+    # Kein CommandHandler mehr für "frage"
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, frage))  # Reagiert auf freien Text
+
     app.run_polling()
 
 if __name__ == '__main__':
