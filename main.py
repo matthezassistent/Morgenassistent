@@ -6,7 +6,8 @@ import dateparser
 from googleapiclient.discovery import build
 from google.oauth2.credentials import Credentials
 from telegram import Update
-from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, MessageHandler, filters
+
 
 # token.pkl aus Environment erzeugen
 if not os.path.exists("token.pkl"):
