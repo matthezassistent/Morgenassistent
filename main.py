@@ -2,6 +2,7 @@ import os
 import base64
 import datetime
 import pickle
+import dateparser
 from googleapiclient.discovery import build
 from google.oauth2.credentials import Credentials
 from telegram import Update
@@ -63,35 +64,23 @@ async def tomorrow(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reply = get_tomorrows_events()
     await update.message.reply_text(reply)
 
-def main():
-    print("👀 Bot gestartet und wartet auf Nachrichten.")
-    app = ApplicationBuilder().token(BOT_TOKEN).build()
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("tomorrow", tomorrow))
-    app.add_handler(CommandHandler("frage", frage))
-    app.run_polling()
-
-import dateparser
-
+# NEU: Sprachverständnis /frage
 async def frage(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.replace("/frage", "").strip()
-    
+
     if not text:
         await update.message.reply_text("Bitte stell eine Frage, z. B. 'Was ist morgen?'")
         return
 
-    # Versuche Datum aus dem Text zu extrahieren
     parsed_date = dateparser.parse(text, languages=['de'])
 
     if not parsed_date:
         await update.message.reply_text("❌ Ich konnte kein Datum aus deiner Frage erkennen.")
         return
 
-    # Anfang und Ende des Tages bestimmen
     start = datetime.datetime(parsed_date.year, parsed_date.month, parsed_date.day, 0, 0, 0).isoformat() + 'Z'
     end = datetime.datetime(parsed_date.year, parsed_date.month, parsed_date.day, 23, 59, 59).isoformat() + 'Z'
 
-    # Kalenderabfrage
     creds = load_credentials()
     service = build('calendar', 'v3', credentials=creds)
     events_result = service.events().list(
@@ -103,7 +92,6 @@ async def frage(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ).execute()
 
     events = events_result.get('items', [])
-
     if not events:
         await update.message.reply_text(f"📅 Keine Termine am {parsed_date.strftime('%d.%m.%Y')}.")
     else:
@@ -115,6 +103,15 @@ async def frage(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         await update.message.reply_text(reply)
 
+# MAIN-Funktion
+def main():
+    print("👀 Bot gestartet und wartet auf Nachrichten.")
+
+    app = ApplicationBuilder().token(BOT_TOKEN).build()
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("tomorrow", tomorrow))
+    app.add_handler(CommandHandler("frage", frage))
+    app.run_polling()
 
 if __name__ == '__main__':
     main()
