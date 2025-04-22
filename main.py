@@ -64,4 +64,11 @@ async def tomorrow(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(reply)
 
 def main():
-    print("👀 Bot gestartet und
+    print("👀 Bot gestartet und wartet auf Nachrichten.")
+    app = ApplicationBuilder().token(BOT_TOKEN).build()
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("tomorrow", tomorrow))
+    app.run_polling()
+
+if __name__ == '__main__':
+    main()
