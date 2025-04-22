@@ -156,7 +156,7 @@ def main():
     bot = Bot(BOT_TOKEN)
 
     scheduler = AsyncIOScheduler(timezone="Europe/Berlin")
-    scheduler.add_job(send_daily_summary, 'cron', hour=7, minute=0, args=[bot])
+    scheduler.add_job(send_daily_summary, 'cron', hour=6, minute=20, args=[bot])
     scheduler.add_job(send_evening_summary, 'cron', hour=21, minute=0, args=[bot])
     scheduler.start()
 
