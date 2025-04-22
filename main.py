@@ -83,6 +83,10 @@ def get_events_for_date(target_date: datetime.datetime):
 # ✅ Telegram-Kommandos
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("👋 Hallo! Ich bin dein Kalenderassistent.\nFrag mich z. B. 'Was ist morgen?'")
+    await update.message.reply_text(f"✅ Deine Chat-ID ist: {update.effective_chat.id}")
+    print(f"👤 Chat-ID: {update.effective_chat.id}")
+
+    await update.message.reply_text("👋 Hallo! Ich bin dein Kalenderassistent.\nFrag mich z. B. 'Was ist morgen?'")
 
 async def tomorrow(update: Update, context: ContextTypes.DEFAULT_TYPE):
     date = datetime.datetime.utcnow() + datetime.timedelta(days=1)
