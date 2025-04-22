@@ -3,6 +3,8 @@ import base64
 import datetime
 import pickle
 import dateparser
+import pytz
+from dateutil import parser
 
 from googleapiclient.discovery import build
 from google.oauth2.credentials import Credentials
@@ -42,7 +44,7 @@ def list_all_calendars():
     calendars = calendar_list.get('items', [])
     return [(cal['summary'], cal['id']) for cal in calendars]
 
-# ✅ Events für ein bestimmtes Datum
+# ✅ Events für ein bestimmtes Datum (mit Pagination)
 def get_events_for_date(target_date: datetime.datetime):
     creds = load_credentials()
     service = build('calendar', 'v3', credentials=creds)
@@ -54,15 +56,25 @@ def get_events_for_date(target_date: datetime.datetime):
     calendars = list_all_calendars()
 
     for name, cal_id in calendars:
-        events_result = service.events().list(
-            calendarId=cal_id,
-            timeMin=start,
-            timeMax=end,
-            singleEvents=True,
-            orderBy='startTime'
-        ).execute()
+        events = []
+        page_token = None
 
-        events = events_result.get('items', [])
+        while True:
+            events_result = service.events().list(
+                calendarId=cal_id,
+                timeMin=start,
+                timeMax=end,
+                singleEvents=True,
+                orderBy='startTime',
+                pageToken=page_token
+            ).execute()
+
+            events.extend(events_result.get('items', []))
+            page_token = events_result.get('nextPageToken')
+
+            if not page_token:
+                break
+
         if events:
             all_events.append((name, events))
 
@@ -87,7 +99,7 @@ async def frage(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await send_events_for_date(update, parsed_date)
 
-# ✅ Ausgabe generieren
+# ✅ Ausgabe generieren (mit europäischer Zeitzone)
 async def send_events_for_date(update: Update, date: datetime.datetime):
     calendars_with_events = get_events_for_date(date)
 
@@ -96,10 +108,19 @@ async def send_events_for_date(update: Update, date: datetime.datetime):
         return
 
     response = f"📅 Termine am {date.strftime('%d.%m.%Y')}:\n\n"
+    tz = pytz.timezone("Europe/Berlin")
+
     for name, events in calendars_with_events:
         response += f"🗓️ {name}:\n"
         for event in events:
-            start_time = event['start'].get('dateTime', event['start'].get('date'))
+            start_raw = event['start'].get('dateTime', event['start'].get('date'))
+            try:
+                dt_utc = parser.parse(start_raw)
+                dt_local = dt_utc.astimezone(tz)
+                start_time = dt_local.strftime("%H:%M")
+            except Exception:
+                start_time = "Ganztägig"
+
             summary = event.get('summary', 'Kein Titel')
             response += f"- {start_time}: {summary}\n"
         response += "\n"
