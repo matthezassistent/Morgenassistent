@@ -5,6 +5,7 @@ import pickle
 import dateparser
 import pytz
 from dateutil import parser
+from dateparser.search import search_dates
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from googleapiclient.discovery import build
@@ -86,13 +87,13 @@ def get_events_for_date(target_date: datetime.datetime):
 def generate_event_summary(date: datetime.datetime):
     calendars_with_events = get_events_for_date(date)
     if not calendars_with_events:
-        return f"📅 Keine Termine am {date.strftime('%d.%m.%Y')}."
+        return f"\U0001F4C5 Keine Termine am {date.strftime('%d.%m.%Y')}."
 
-    response = f"📅 Termine am {date.strftime('%d.%m.%Y')}:\n\n"
+    response = f"\U0001F4C5 Termine am {date.strftime('%d.%m.%Y')}:\n\n"
     tz = pytz.timezone("Europe/Berlin")
 
     for name, events in calendars_with_events:
-        response += f"🗓️ {name}:\n"
+        response += f"\U0001F5D3️ {name}:\n"
         for event in events:
             start_raw = event['start'].get('dateTime', event['start'].get('date'))
             try:
@@ -109,7 +110,7 @@ def generate_event_summary(date: datetime.datetime):
 
 # ✅ Telegram-Kommandos
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("👋 Hallo! Ich bin dein Kalenderassistent.\nFrag mich z. B. 'Was ist morgen?'")
+    await update.message.reply_text("\U0001F44B Hallo! Ich bin dein Kalenderassistent.\nFrag mich z. B. 'Was ist morgen?'")
     await update.message.reply_text(f"✅ Deine Chat-ID ist: {update.effective_chat.id}")
 
 async def tomorrow(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -117,14 +118,20 @@ async def tomorrow(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await send_events_for_date(update, date)
 
 async def frage(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = update.message.text.strip()
-    parsed_date = dateparser.parse(text, languages=['de'])
+    try:
+        text = update.message.text.strip()
+        results = search_dates(text, languages=['de'])
 
-    if not parsed_date:
-        await update.message.reply_text("❌ Ich konnte kein Datum erkennen.")
-        return
+        if not results or not results[0][1]:
+            await update.message.reply_text("❌ Ich konnte kein Datum erkennen.")
+            return
 
-    await send_events_for_date(update, parsed_date)
+        parsed_date = results[0][1]
+        await send_events_for_date(update, parsed_date)
+
+    except Exception as e:
+        print(f"⚠️ Fehler in frage(): {e}")
+        await update.message.reply_text("⚠️ Da ist etwas schiefgelaufen beim Verarbeiten deiner Anfrage.")
 
 async def send_events_for_date(update: Update, date: datetime.datetime):
     summary = generate_event_summary(date)
@@ -139,11 +146,11 @@ async def send_daily_summary(bot: Bot):
 async def send_evening_summary(bot: Bot):
     tomorrow = datetime.datetime.utcnow().astimezone(pytz.timezone("Europe/Berlin")) + datetime.timedelta(days=1)
     message = generate_event_summary(tomorrow)
-    await bot.send_message(chat_id=CHAT_ID, text=f"Gute Nacht 🌙\nHier ist die Vorschau für morgen:\n\n{message}")
+    await bot.send_message(chat_id=CHAT_ID, text=f"Gute Nacht \U0001F319\nHier ist die Vorschau für morgen:\n\n{message}")
 
 # ✅ Bot starten
 def main():
-    print("👀 Bot gestartet und wartet auf Nachrichten.")
+    print("\U0001F440 Bot gestartet und wartet auf Nachrichten.")
 
     app = ApplicationBuilder().token(BOT_TOKEN).build()
     bot = Bot(BOT_TOKEN)
