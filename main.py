@@ -1,27 +1,27 @@
 import os
-from telegram import Update
-from telegram.ext import Application, CommandHandler, ContextTypes
-from datetime import datetime
+import datetime
+import pickle
+from telegram.ext import Updater, CommandHandler
+from googleapiclient.discovery import build
+from google.oauth2.credentials import Credentials
 
-# Bot-Token aus Umgebungsvariablen laden
+# Telegram Bot Token aus Umgebungsvariable
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
-# Initialisiere den Bot mit der neuen API
-application = Application.builder().token(BOT_TOKEN).build()
+# Kalender-TOKEN laden
+def load_credentials():
+    with open("token.pkl", "rb") as token_file:
+        creds = pickle.load(token_file)
+    return creds
 
-# Kommando zum Starten
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Guten Morgen! Ich bin dein Assistent.")
+# Kalender-Abfrage für morgen
+def get_tomorrows_events():
+    creds = load_credentials()
+    service = build('calendar', 'v3', credentials=creds)
 
-# Kommando für tägliche Erinnerung
-async def today(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    now = datetime.now()
-    date_string = now.strftime("%A, %d %B %Y")
-    await update.message.reply_text(f"Heute ist {date_string}. Deine Termine und Aufgaben kommen gleich!")
+    now = datetime.datetime.utcnow()
+    tomorrow = now + datetime.timedelta(days=1)
+    start = datetime.datetime(tomorrow.year, tomorrow.month, tomorrow.day, 0, 0, 0).isoformat() + 'Z'
+    end = datetime.datetime(tomorrow.year, tomorrow.month, tomorrow.day, 23, 59, 59).isoformat() + 'Z'
 
-# Hinzufügen der Handler
-application.add_handler(CommandHandler("start", start))
-application.add_handler(CommandHandler("today", today))
-
-# Starten des Bots
-application.run_polling()
+    events_result =_
