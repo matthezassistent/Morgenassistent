@@ -39,3 +39,25 @@ def get_tomorrows_events():
     end = datetime.datetime(tomorrow.year, tomorrow.month, tomorrow.day, 23, 59, 59).isoformat() + 'Z'
 
     events_result =_
+    def start(update, context):
+    update.message.reply_text("👋 Hallo! Ich bin dein Kalenderassistent.")
+
+def tomorrow(update, context):
+    reply = get_tomorrows_events()
+    update.message.reply_text(reply)
+
+def main():
+    print("👀 Bot gestartet und wartet auf Nachrichten.")
+    
+    updater = Updater(BOT_TOKEN, use_context=True)
+    dp = updater.dispatcher
+
+    dp.add_handler(CommandHandler("start", start))
+    dp.add_handler(CommandHandler("tomorrow", tomorrow))
+
+    updater.start_polling()  # Startet die Kommunikation mit Telegram
+    updater.idle()           # Verhindert das Beenden des Programms
+
+if __name__ == '__main__':
+    main()
+
