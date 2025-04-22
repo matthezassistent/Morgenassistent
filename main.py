@@ -1,4 +1,18 @@
 import os
+import base64
+
+# Falls nötig: token.pkl aus der Umgebungsvariable rekonstruieren
+if not os.path.exists("token.pkl"):
+    encoded_token = os.getenv("TOKEN_PKL_BASE64")
+    if encoded_token:
+        with open("token.pkl", "wb") as f:
+            f.write(base64.b64decode(encoded_token))
+        print("✅ token.pkl aus Umgebungsvariable erzeugt.")
+    else:
+        print("⚠️ Keine TOKEN_PKL_BASE64-Variable gefunden.")
+
+
+import os
 import datetime
 import pickle
 from telegram.ext import Updater, CommandHandler
