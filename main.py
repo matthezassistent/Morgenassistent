@@ -44,25 +44,6 @@ def load_credentials():
         creds = pickle.load(token_file)
     return creds
 
-# ✅ Briefing zu einem Event mit ChatGPT (nur wenn Code "691" enthalten ist)
-def generate_chatgpt_briefing(event_summary):
-    if "691" not in event_summary:
-        return None
-    try:
-        client = openai.OpenAI(api_key=OPENAI_API_KEY)
-        response = client.chat.completions.create(
-            model="gpt-3.5-turbo",
-            messages=[
-                {"role": "system", "content": "Du bist ein hilfreicher Assistent, der kurze (maximal 5 Zeilen) Briefings zu bestimmten Kalenderterminen erstellt."},
-                {"role": "user", "content": f"Erstelle ein kurzes Briefing zu folgendem Termin: {event_summary}"}
-            ],
-            max_tokens=300
-        )
-        return response.choices[0].message.content.strip()
-    except Exception as e:
-        return f"⚠️ Briefing nicht möglich: {e}"
-
-
 # ✅ Termin zum Kalender hinzufügen
 def add_event_to_calendar(summary, start_time, end_time):
     try:
