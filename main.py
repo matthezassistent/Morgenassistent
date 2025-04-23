@@ -332,14 +332,39 @@ def main():
 
 # ✅ Schulferientage in Salzburg 2025 (manuell gepflegt)
 
-FERIENTAGE = [ (datetime.date(2025, 2, 10), datetime.date(2025, 2, 15)),  # Semesterferien (datetime.date(2025, 4, 12), datetime.date(2025, 4, 21)),  # Osterferien (datetime.date(2025, 6, 7), datetime.date(2025, 6, 9)),    # Pfingsten (datetime.date(2025, 7, 5), datetime.date(2025, 9, 7)),    # Sommer (datetime.date(2025, 10, 27), datetime.date(2025, 10, 31)),# Herbst (datetime.date(2025, 12, 24), datetime.date(2026, 1, 6)),  # Weihnachten ]
+FERIENTAGE = [
+    (datetime.date(2025, 2, 10), datetime.date(2025, 2, 15)),  # Semesterferien
+    (datetime.date(2025, 4, 12), datetime.date(2025, 4, 21)),  # Osterferien
+    (datetime.date(2025, 6, 7), datetime.date(2025, 6, 9)),    # Pfingsten
+    (datetime.date(2025, 7, 5), datetime.date(2025, 9, 7)),    # Sommerferien
+    (datetime.date(2025, 10, 27), datetime.date(2025, 10, 31)),# Herbstferien
+    (datetime.date(2025, 12, 24), datetime.date(2026, 1, 6)),  # Weihnachtsferien
+]
 
 def ist_schultag(): heute = datetime.date.today() if heute.weekday() >= 5:  # Samstag (5), Sonntag (6) return False for start, ende in FERIENTAGE: if start <= heute <= ende: return False return True
 
 # ✅ Zugstatus aus ÖBB Scotty API holen (vereinfachte Demo mit Dummy-Daten)
 
-def get_train_status(): try: url = "https://fahrplan.oebb.at/bin/query.exe/dn" headers = { "User-Agent": "Mozilla/5.0" } payloads = [ {"from": "Hallein", "to": "Salzburg Hbf", "time": "06:59", "date": datetime.date.today().strftime("%d.%m.%Y")}, {"from": "Hallein", "to": "Salzburg Hbf", "time": "07:04", "date": datetime.date.today().strftime("%d.%m.%Y")}, ]
-
+def get_train_status():
+    try:
+        url = "https://fahrplan.oebb.at/bin/query.exe/dn"
+        headers = {
+            "User-Agent": "Mozilla/5.0"
+        }
+        payloads = [
+            {
+                "from": "Hallein",
+                "to": "Salzburg Hbf",
+                "time": "06:59",
+                "date": datetime.date.today().strftime("%d.%m.%Y")
+            },
+            {
+                "from": "Hallein",
+                "to": "Salzburg Hbf",
+                "time": "07:04",
+                "date": datetime.date.today().strftime("%d.%m.%Y")
+            },
+        ]
 results = []
 
     for payload in payloads:
@@ -391,10 +416,19 @@ await bot.send_message(chat_id=CHAT_ID, text=message)
 
 # ✅ Bestehenden Scheduler erweitern
 
-async def post_init(application): scheduler = AsyncIOScheduler(timezone="Europe/Berlin") bot = application.bot scheduler.add_job(send_daily_summary, 'cron', hour=7, minute=0, args=[bot]) scheduler.add_job(send_evening_summary, 'cron', hour=21, minute=0, args=[bot]) scheduler.add_job(send_train_update, 'cron', hour=6, minute=30, args=[bot]) scheduler.add_job(send_train_update, 'cron', hour=6, minute=40, args=[bot]) scheduler.start() print("🕒 Scheduler gestartet")
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
-[RESTLICHER CODE: main() und if name == 'main': bleibt gleich]
+async def post_init(application):
+    scheduler = AsyncIOScheduler(timezone="Europe/Berlin")
+    bot = application.bot
 
+    scheduler.add_job(send_daily_summary, 'cron', hour=7, minute=0, args=[bot])
+    scheduler.add_job(send_evening_summary, 'cron', hour=21, minute=0, args=[bot])
+    scheduler.add_job(send_train_update, 'cron', hour=6, minute=30, args=[bot])
+    scheduler.add_job(send_train_update, 'cron', hour=6, minute=40, args=[bot])
+
+    scheduler.start()
+    print("🕒 Scheduler gestartet")
 
 if __name__ == '__main__':
     main()
