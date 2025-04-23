@@ -12,6 +12,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from googleapiclient.discovery import build
 from google.oauth2.credentials import Credentials
+from googleapiclient.errors import HttpError
 
 from telegram import Update, Bot
 from telegram.ext import (
@@ -43,6 +44,21 @@ def load_credentials():
     with open("token.pkl", "rb") as token_file:
         creds = pickle.load(token_file)
     return creds
+
+# ✅ Termin zum Kalender hinzufügen
+def add_event_to_calendar(summary, start_time, end_time):
+    try:
+        creds = load_credentials()
+        service = build('calendar', 'v3', credentials=creds)
+        event = {
+            'summary': summary,
+            'start': {'dateTime': start_time.isoformat(), 'timeZone': 'Europe/Berlin'},
+            'end': {'dateTime': end_time.isoformat(), 'timeZone': 'Europe/Berlin'}
+        }
+        event = service.events().insert(calendarId='primary', body=event).execute()
+        return f"✅ Termin hinzugefügt: {event.get('summary')}"
+    except HttpError as error:
+        return f"❌ Fehler beim Hinzufügen des Termins: {error}"
 
 # ✅ Liste aller Kalender abrufen
 def list_all_calendars():
@@ -185,6 +201,22 @@ async def add_todoist(update: Update, context: ContextTypes.DEFAULT_TYPE):
     result = add_task_to_todoist(content)
     await update.message.reply_text(result)
 
+# ✅ Neue Funktion zum Hinzufügen von Kalender-Terminen über Befehl
+async def add_event(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = update.message.text.replace("/termin ", "").strip()
+    parts = text.split(" | ")
+    if len(parts) < 3:
+        await update.message.reply_text("❗ Format: /termin Titel | 2025-05-01 14:00 | 2025-05-01 15:00")
+        return
+    summary, start_str, end_str = parts
+    try:
+        start_dt = parser.parse(start_str)
+        end_dt = parser.parse(end_str)
+        result = add_event_to_calendar(summary, start_dt, end_dt)
+        await update.message.reply_text(result)
+    except Exception as e:
+        await update.message.reply_text(f"❌ Fehler beim Erstellen des Termins: {e}")
+
 async def send_events_for_date(update: Update, date: datetime.datetime):
     summary = generate_event_summary(date)
     await update.message.reply_text(summary)
@@ -218,6 +250,7 @@ def main():
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("tomorrow", tomorrow))
     app.add_handler(CommandHandler("todo", add_todoist))
+    app.add_handler(CommandHandler("termin", add_event))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, frage))
 
     app.run_polling()
