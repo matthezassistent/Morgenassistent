@@ -145,15 +145,11 @@ def generate_event_summary(date: datetime.datetime):
     if not calendars_with_events:
         return f"📅 Keine Termine am {date.strftime('%d.%m.%Y')}."
 
-response = f"📅 Termine am {date.strftime('%d.%m.%Y')}:\n\n"
-
-
-"
+    response = f"📅 Termine am {date.strftime('%d.%m.%Y')}:\n\n"
     tz = pytz.timezone("Europe/Berlin")
 
     for name, events in calendars_with_events:
-        response += f"🗓️ {name}:
-"
+        response += f"🗓️ {name}:\n"
         for event in events:
             start_raw = event['start'].get('dateTime', event['start'].get('date'))
             try:
@@ -165,14 +161,12 @@ response = f"📅 Termine am {date.strftime('%d.%m.%Y')}:\n\n"
 
             summary = event.get('summary', 'Kein Titel')
             briefing = generate_chatgpt_briefing(summary)
-            response += f"- {start_time}: {summary}
-"
+            response += f"- {start_time}: {summary}\n"
             if briefing:
-                response += f"  💬 {briefing}
-"
-        response += "
-"
+                response += f"  💬 {briefing}\n"
+        response += "\n"
     return response
+
 
 # ✅ Telegram-Kommandos
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
