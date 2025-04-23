@@ -38,6 +38,37 @@ CHAT_ID = 8011259706
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 TODOIST_API_TOKEN = os.getenv("TODOIST_API_TOKEN")
 
+# Chat GPT abfrage
+
+def generate_chatgpt_briefing(summary):
+    if not OPENAI_API_KEY:
+        return None
+
+    try:
+        openai.api_key = OPENAI_API_KEY
+        response = openai.ChatCompletion.create(
+            model="gpt-4",
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "Du bist ein intelligenter Assistent, der kurze, prägnante Briefings für Kalendereinträge erstellt. "
+                        "Wenn der Eintrag z. B. ein Musikstück oder eine historische Figur erwähnt, gib eine hilfreiche, "
+                        "2-sätzige Einordnung für eine gut vorbereitete Besprechung oder Unterrichtssituation."
+                    )
+                },
+                {
+                    "role": "user",
+                    "content": f"Gib mir ein kurzes Briefing zu diesem Kalendereintrag: '{summary}'"
+                }
+            ],
+            max_tokens=100,
+            temperature=0.7
+        )
+        return response.choices[0].message["content"].strip()
+    except Exception as e:
+        return f"(GPT-Fehler: {str(e)})"
+
 # ✅ Zugang zum Kalender
 def load_credentials():
     with open("token.pkl", "rb") as token_file:
