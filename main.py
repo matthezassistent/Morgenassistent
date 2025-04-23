@@ -51,7 +51,7 @@ def generate_chatgpt_briefing(event_summary):
     try:
         client = openai.OpenAI(api_key=OPENAI_API_KEY)
         response = client.chat.completions.create(
-            model="gpt-4",
+            model="gpt-3.5-turbo",
             messages=[
                 {"role": "system", "content": "Du bist ein hilfreicher Assistent, der kurze (maximal 5 Zeilen) Briefings zu bestimmten Kalenderterminen erstellt."},
                 {"role": "user", "content": f"Erstelle ein kurzes Briefing zu folgendem Termin: {event_summary}"}
