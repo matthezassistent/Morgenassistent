@@ -39,7 +39,6 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 TODOIST_API_TOKEN = os.getenv("TODOIST_API_TOKEN")
 
 # Chat GPT abfrage
-
 def generate_chatgpt_briefing(summary):
     if not OPENAI_API_KEY:
         return None
@@ -53,7 +52,7 @@ def generate_chatgpt_briefing(summary):
                     "role": "system",
                     "content": (
                         "Du bist ein intelligenter Assistent, der kurze, prägnante Briefings für Kalendereinträge erstellt. "
-                        "Wenn der Eintrag z. B. ein Musikstück oder eine historische Figur erwähnt, gib eine hilfreiche, "
+                        "Wenn der Eintrag z.\u200bB. ein Musikstück oder eine historische Figur erwähnt, gib eine hilfreiche, "
                         "2-sätzige Einordnung für eine gut vorbereitete Besprechung oder Unterrichtssituation."
                     )
                 },
@@ -153,7 +152,6 @@ def add_task_to_todoist(content, due_string="today"):
         return f"❌ Ausnahme beim Hinzufügen zu Todoist: {e}"
 
 # Todoist auflisten
-
 def get_todoist_tasks():
     try:
         headers = {
@@ -169,7 +167,7 @@ def get_todoist_tasks():
         tasks = response.json()
         if not tasks:
             return "✅ Keine Aufgaben für heute oder überfällig."
-        
+
         result = "📝 Aufgaben für heute / überfällig:\n\n"
         for task in tasks:
             due = task.get("due", {}).get("string", "kein Datum")
@@ -212,7 +210,6 @@ def generate_event_summary(date: datetime.datetime):
 
     return response
 
-
 # ✅ Telegram-Kommandos
 async def frage(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
@@ -250,7 +247,6 @@ async def frage(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         await update.message.reply_text(f"⚠️ Fehler beim Verarbeiten deiner Anfrage:\n{e}")
 
-# ✅ Neue Funktion zum Hinzufügen von Todoist-Aufgaben über Befehl
 async def add_todoist(update: Update, context: ContextTypes.DEFAULT_TYPE):
     content = update.message.text.replace("/todo ", "").strip()
     if not content:
@@ -259,12 +255,10 @@ async def add_todoist(update: Update, context: ContextTypes.DEFAULT_TYPE):
     result = add_task_to_todoist(content)
     await update.message.reply_text(result)
 
-# zusatz von todoist
 async def list_todoist(update: Update, context: ContextTypes.DEFAULT_TYPE):
     result = get_todoist_tasks()
     await update.message.reply_text(result)
 
-# ✅ Neue Funktion zum Hinzufügen von Kalender-Terminen über Befehl
 async def add_event(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.replace("/termin ", "").strip()
     parts = text.split(" | ")
@@ -284,7 +278,6 @@ async def send_events_for_date(update: Update, date: datetime.datetime):
     summary = generate_event_summary(date)
     await update.message.reply_text(summary)
 
-# ✅ Scheduler-Funktionen für automatische Nachrichten
 async def send_daily_summary(bot: Bot):
     today = datetime.datetime.utcnow().astimezone(pytz.timezone("Europe/Berlin"))
     message = generate_event_summary(today)
@@ -303,24 +296,27 @@ async def post_init(application):
     scheduler.start()
     print("🕒 Scheduler gestartet")
 
-# ✅ Bot starten
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("👋 Hallo! Ich bin dein Kalenderassistent. Frag mich z. B. 'Was ist morgen?'")
+    await update.message.reply_text(f"✅ Deine Chat-ID ist: {update.effective_chat.id}")
+
+async def tomorrow(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    date = datetime.datetime.utcnow().astimezone(pytz.timezone("Europe/Berlin")) + datetime.timedelta(days=1)
+    await send_events_for_date(update, date)
 
 def main():
     print("👀 Bot gestartet und wartet auf Nachrichten.")
 
     app = ApplicationBuilder().token(BOT_TOKEN).post_init(post_init).build()
 
-    # Handler für Telegram-Befehle
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("tomorrow", tomorrow))
     app.add_handler(CommandHandler("todo", add_todoist))
     app.add_handler(CommandHandler("termin", add_event))
-    app.add_handler(CommandHandler("todos", list_todoist))  # falls du den eingebaut hast
-
-    # Alle anderen Textnachrichten
+    app.add_handler(CommandHandler("todos", list_todoist))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, frage))
 
-    # Bot starten (Polling-Modus)
     app.run_polling()
+
 if __name__ == '__main__':
     main()
