@@ -170,8 +170,7 @@ def generate_event_summary(date: datetime.datetime):
 
 # ✅ Telegram-Kommandos
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("👋 Hallo! Ich bin dein Kalenderassistent.
-Frag mich z. B. 'Was ist morgen?'")
+    await update.message.reply_text("👋 Hallo! Ich bin dein Kalenderassistent. Frag mich z. B. 'Was ist morgen?'")
     await update.message.reply_text(f"✅ Deine Chat-ID ist: {update.effective_chat.id}")
 
 async def tomorrow(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -192,6 +191,7 @@ async def frage(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     except Exception as e:
         await update.message.reply_text("⚠️ Fehler beim Verarbeiten deiner Anfrage.")
+
 
 # ✅ Neue Funktion zum Hinzufügen von Todoist-Aufgaben über Befehl
 async def add_todoist(update: Update, context: ContextTypes.DEFAULT_TYPE):
