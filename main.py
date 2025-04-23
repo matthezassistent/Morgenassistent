@@ -330,8 +330,6 @@ def main():
 
     app.run_polling()
 
-[VORHERIGER CODE … bleibt unverändert bis zur letzten Funktion]
-
 ✅ Schulferientage in Salzburg 2025 (manuell gepflegt)
 
 FERIENTAGE = [ (datetime.date(2025, 2, 10), datetime.date(2025, 2, 15)),  # Semesterferien (datetime.date(2025, 4, 12), datetime.date(2025, 4, 21)),  # Osterferien (datetime.date(2025, 6, 7), datetime.date(2025, 6, 9)),    # Pfingsten (datetime.date(2025, 7, 5), datetime.date(2025, 9, 7)),    # Sommer (datetime.date(2025, 10, 27), datetime.date(2025, 10, 31)),# Herbst (datetime.date(2025, 12, 24), datetime.date(2026, 1, 6)),  # Weihnachten ]
