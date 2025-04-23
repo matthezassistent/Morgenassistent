@@ -214,29 +214,41 @@ def generate_event_summary(date: datetime.datetime):
 
 
 # ✅ Telegram-Kommandos
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("👋 Hallo! Ich bin dein Kalenderassistent. Frag mich z. B. 'Was ist morgen?'")
-    await update.message.reply_text(f"✅ Deine Chat-ID ist: {update.effective_chat.id}")
-
-async def tomorrow(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    date = datetime.datetime.utcnow() + datetime.timedelta(days=1)
-    await send_events_for_date(update, date)
-
 async def frage(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        text = update.message.text.strip()
-        results = search_dates(text, languages=['de'])
+        text = update.message.text.strip().lower()
 
-        if not results or not results[0][1]:
+        # Sonderbegriffe manuell behandeln
+        if "nächste woche" in text:
+            today = datetime.datetime.now()
+            next_monday = today + datetime.timedelta(days=(7 - today.weekday()))
+            await send_events_for_date(update, next_monday)
+            return
+
+        if "dieses wochenende" in text:
+            today = datetime.datetime.now()
+            saturday = today + datetime.timedelta((5 - today.weekday()) % 7)
+            await send_events_for_date(update, saturday)
+            return
+
+        if "demnächst" in text or "bald" in text:
+            date = datetime.datetime.now() + datetime.timedelta(days=2)
+            await send_events_for_date(update, date)
+            return
+
+        # Standard-NLP mit dateparser
+        results = search_dates(text, languages=['de'])
+        if not results:
             await update.message.reply_text("❌ Ich konnte kein Datum erkennen.")
             return
 
         parsed_date = results[0][1]
+        parsed_date = parsed_date.replace(hour=0, minute=0, second=0, microsecond=0)
+
         await send_events_for_date(update, parsed_date)
 
     except Exception as e:
-        await update.message.reply_text("⚠️ Fehler beim Verarbeiten deiner Anfrage.")
-
+        await update.message.reply_text(f"⚠️ Fehler beim Verarbeiten deiner Anfrage:\n{e}")
 
 # ✅ Neue Funktion zum Hinzufügen von Todoist-Aufgaben über Befehl
 async def add_todoist(update: Update, context: ContextTypes.DEFAULT_TYPE):
