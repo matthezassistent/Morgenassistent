@@ -152,32 +152,64 @@ def add_task_to_todoist(content, due_string="today"):
     except Exception as e:
         return f"❌ Ausnahme beim Hinzufügen zu Todoist: {e}"
 
+# Todoist auflisten
+
+def get_todoist_tasks():
+    try:
+        headers = {
+            "Authorization": f"Bearer {TODOIST_API_TOKEN}"
+        }
+        params = {
+            "filter": "today | overdue"
+        }
+        response = requests.get("https://api.todoist.com/rest/v2/tasks", headers=headers, params=params)
+        if response.status_code != 200:
+            return f"❌ Fehler beim Abrufen der Aufgaben: {response.text}"
+
+        tasks = response.json()
+        if not tasks:
+            return "✅ Keine Aufgaben für heute oder überfällig."
+        
+        result = "📝 Aufgaben für heute / überfällig:\n\n"
+        for task in tasks:
+            due = task.get("due", {}).get("string", "kein Datum")
+            result += f"- {task['content']} ({due})\n"
+        return result
+
+    except Exception as e:
+        return f"❌ Fehler beim Abrufen der Aufgaben: {e}"
+
 # ✅ Ausgabe generieren mit optionalem GPT-Briefing
 def generate_event_summary(date: datetime.datetime):
     calendars_with_events = get_events_for_date(date)
     if not calendars_with_events:
-        return f"📅 Keine Termine am {date.strftime('%d.%m.%Y')}."
+        response = f"📅 Keine Termine am {date.strftime('%d.%m.%Y')}."
+    else:
+        response = f"📅 Termine am {date.strftime('%d.%m.%Y')}:\n\n"
+        tz = pytz.timezone("Europe/Berlin")
 
-    response = f"📅 Termine am {date.strftime('%d.%m.%Y')}:\n\n"
-    tz = pytz.timezone("Europe/Berlin")
+        for name, events in calendars_with_events:
+            response += f"🗓️ {name}:\n"
+            for event in events:
+                start_raw = event['start'].get('dateTime', event['start'].get('date'))
+                try:
+                    dt_utc = parser.parse(start_raw)
+                    dt_local = dt_utc.astimezone(tz)
+                    start_time = dt_local.strftime("%H:%M")
+                except Exception:
+                    start_time = "Ganztägig"
 
-    for name, events in calendars_with_events:
-        response += f"🗓️ {name}:\n"
-        for event in events:
-            start_raw = event['start'].get('dateTime', event['start'].get('date'))
-            try:
-                dt_utc = parser.parse(start_raw)
-                dt_local = dt_utc.astimezone(tz)
-                start_time = dt_local.strftime("%H:%M")
-            except Exception:
-                start_time = "Ganztägig"
+                summary = event.get('summary', 'Kein Titel')
+                briefing = generate_chatgpt_briefing(summary)
+                response += f"- {start_time}: {summary}\n"
+                if briefing:
+                    response += f"  💬 {briefing}\n"
+            response += "\n"
 
-            summary = event.get('summary', 'Kein Titel')
-            briefing = generate_chatgpt_briefing(summary)
-            response += f"- {start_time}: {summary}\n"
-            if briefing:
-                response += f"  💬 {briefing}\n"
-        response += "\n"
+    # Todoist-Teil hinzufügen
+    todo_response = get_todoist_tasks()
+    response += "\n" + todo_response
+
     return response
 
 
