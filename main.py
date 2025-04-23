@@ -4,7 +4,6 @@ import datetime
 import pickle
 import dateparser
 import pytz
-import asyncio  
 from dateutil import parser
 from dateparser.search import search_dates
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -149,26 +148,26 @@ async def send_evening_summary(bot: Bot):
     message = generate_event_summary(tomorrow)
     await bot.send_message(chat_id=CHAT_ID, text=f"Gute Nacht \U0001F319\nHier ist die Vorschau für morgen:\n\n{message}")
 
-# ✅ Bot starten
-async def main():
-    print("👀 Bot gestartet und wartet auf Nachrichten.")
-
-    app = ApplicationBuilder().token(BOT_TOKEN).build()
-    bot = Bot(BOT_TOKEN)
-
+# ✅ Scheduler wird beim Start des Bots aktiviert
+async def post_init(application):
     scheduler = AsyncIOScheduler(timezone="Europe/Berlin")
+    bot = application.bot
     scheduler.add_job(send_daily_summary, 'cron', hour=7, minute=0, args=[bot])
     scheduler.add_job(send_evening_summary, 'cron', hour=21, minute=0, args=[bot])
     scheduler.start()
+    print("🕒 Scheduler gestartet")
+
+# ✅ Bot starten
+def main():
+    print("👀 Bot gestartet und wartet auf Nachrichten.")
+
+    app = ApplicationBuilder().token(BOT_TOKEN).post_init(post_init).build()
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("tomorrow", tomorrow))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, frage))
 
-    await app.run_polling()
+    app.run_polling()
 
 if __name__ == '__main__':
-    import asyncio
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(main())
-
+    main()
