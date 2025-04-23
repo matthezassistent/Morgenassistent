@@ -331,6 +331,10 @@ def main():
     app.run_polling()
 
 # ✅ Schulferientage in Salzburg 2025 (manuell gepflegt)
+import datetime
+import requests
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from telegram import Bot
 
 FERIENTAGE = [
     (datetime.date(2025, 2, 10), datetime.date(2025, 2, 15)),  # Semesterferien
@@ -341,16 +345,16 @@ FERIENTAGE = [
     (datetime.date(2025, 12, 24), datetime.date(2026, 1, 6)),  # Weihnachtsferien
 ]
 
-def ist_schultag(): 
-    heute = datetime.date.today() 
-    if heute.weekday() >= 5:  # Samstag (5), Sonntag (6) 
-        return False 
-    for start, ende in FERIENTAGE: 
-        if start <= heute <= ende: 
-            return False 
+def ist_schultag():
+    heute = datetime.date.today()
+    if heute.weekday() >= 5:  # Samstag (5), Sonntag (6)
+        return False
+    for start, ende in FERIENTAGE:
+        if start <= heute <= ende:
+            return False
     return True
 
-# ✅ Zugstatus aus ÖBB Scotty API holen (vereinfachte Demo mit Dummy-Daten)
+# ✅ Zugstatus aus ÖBB Scotty API holen
 
 def get_train_status():
     try:
@@ -359,81 +363,75 @@ def get_train_status():
             "User-Agent": "Mozilla/5.0"
         }
         payloads = [
-            {
-                "from": "Hallein",
-                "to": "Salzburg Hbf",
-                "time": "06:59",
-                "date": datetime.date.today().strftime("%d.%m.%Y")
-            },
-            {
-                "from": "Hallein",
-                "to": "Salzburg Hbf",
-                "time": "07:04",
-                "date": datetime.date.today().strftime("%d.%m.%Y")
-            },
+            {"from": "Hallein", "to": "Salzburg Hbf", "time": "06:59", "date": datetime.date.today().strftime("%d.%m.%Y")},
+            {"from": "Hallein", "to": "Salzburg Hbf", "time": "07:04", "date": datetime.date.today().strftime("%d.%m.%Y")},
         ]
-results = []
 
-    for payload in payloads:
-        params = {
-            "input": payload["from"],
-            "boardType": "dep",
-            "time": payload["time"],
-            "date": payload["date"],
-            "REQ0JourneyStopsS0A": "1",
-            "REQ0JourneyStopsZ0A": "1",
-            "REQ0JourneyStopsS0ID": "A=1@L=000000000@",
-            "REQ0JourneyStopsZ0ID": "A=1@L=000000000@",
-            "REQ0HafasSearchForw": "1",
-            "REQ0JourneyProduct_prod_list": "11:1111111111111111",
-            "start": "Suchen"
-        }
-        response = requests.get(url, params=params, headers=headers)
+        results = []
 
-        if response.status_code == 200:
-            text = response.text
-            if "verspätet" in text:
-                delay = "verspätet"
-            elif "pünktlich" in text:
-                delay = "pünktlich"
+        for payload in payloads:
+            params = {
+                "input": payload["from"],
+                "boardType": "dep",
+                "time": payload["time"],
+                "date": payload["date"],
+                "REQ0JourneyStopsS0A": "1",
+                "REQ0JourneyStopsZ0A": "1",
+                "REQ0JourneyStopsS0ID": "A=1@L=000000000@",
+                "REQ0JourneyStopsZ0ID": "A=1@L=000000000@",
+                "REQ0HafasSearchForw": "1",
+                "REQ0JourneyProduct_prod_list": "11:1111111111111111",
+                "start": "Suchen"
+            }
+            response = requests.get(url, params=params, headers=headers)
+
+            if response.status_code == 200:
+                text = response.text
+                if "verspätet" in text:
+                    delay = "verspätet"
+                elif "pünktlich" in text:
+                    delay = "pünktlich"
+                else:
+                    delay = "keine Info"
+
+                gleis = "?"
+                if "Gleis" in text:
+                    try:
+                        gleis = text.split("Gleis ")[1].split("<")[0]
+                    except:
+                        pass
+
+                results.append(f"- {payload['time']} ab Hallein: {delay} (Gleis {gleis})")
             else:
-                delay = "keine Info"
+                results.append(f"- {payload['time']} ab Hallein: Fehler beim Abruf")
 
-            gleis = "?"
-            if "Gleis" in text:
-                try:
-                    gleis = text.split("Gleis ")[1].split("<")[0]
-                except:
-                    pass
+        return results
 
-            results.append(f"- {payload['time']} ab Hallein: {delay} (Gleis {gleis})")
-        else:
-            results.append(f"- {payload['time']} ab Hallein: Fehler beim Abruf")
+    except Exception as e:
+        return [f"Fehler bei der Zugabfrage: {e}"]
 
-    return results
+# ✅ Nachricht senden
 
-except Exception as e:
-    return [f"Fehler bei der Zugabfrage: {e}"]
+CHAT_ID = 8011259706  # <-- ggf. anpassen, falls anders bei dir
 
-async def send_train_update(bot: Bot): if not ist_schultag(): print("🚫 Kein Schultag – keine Zuginfo gesendet.") return
+async def send_train_update(bot: Bot):
+    if not ist_schultag():
+        print("🚫 Kein Schultag – keine Zuginfo gesendet.")
+        return
 
-statusliste = get_train_status()
-message = "🚆 Zugstatus für heute:\n\n" + "\n".join(statusliste)
-await bot.send_message(chat_id=CHAT_ID, text=message)
+    statusliste = get_train_status()
+    message = "🚆 Zugstatus für heute:\n\n" + "\n".join(statusliste)
+    await bot.send_message(chat_id=CHAT_ID, text=message)
 
-# ✅ Bestehenden Scheduler erweitern
-
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
+# ✅ Scheduler-Integration (muss in post_init eingebaut sein)
 
 async def post_init(application):
     scheduler = AsyncIOScheduler(timezone="Europe/Berlin")
     bot = application.bot
-
     scheduler.add_job(send_daily_summary, 'cron', hour=7, minute=0, args=[bot])
     scheduler.add_job(send_evening_summary, 'cron', hour=21, minute=0, args=[bot])
     scheduler.add_job(send_train_update, 'cron', hour=6, minute=30, args=[bot])
     scheduler.add_job(send_train_update, 'cron', hour=6, minute=40, args=[bot])
-
     scheduler.start()
     print("🕒 Scheduler gestartet")
 
