@@ -39,6 +39,7 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 TODOIST_API_TOKEN = os.getenv("TODOIST_API_TOKEN")
 
 # Chat GPT abfrage
+
 def generate_chatgpt_briefing(summary):
     if not OPENAI_API_KEY:
         return None
@@ -52,7 +53,7 @@ def generate_chatgpt_briefing(summary):
                     "role": "system",
                     "content": (
                         "Du bist ein intelligenter Assistent, der kurze, prägnante Briefings für Kalendereinträge erstellt. "
-                        "Wenn der Eintrag z.\u200bB. ein Musikstück oder eine historische Figur erwähnt, gib eine hilfreiche, "
+                        "Wenn der Eintrag z.B. ein Musikstück oder eine historische Figur erwähnt, gib eine hilfreiche, "
                         "2-sätzige Einordnung für eine gut vorbereitete Besprechung oder Unterrichtssituation."
                     )
                 },
@@ -66,15 +67,17 @@ def generate_chatgpt_briefing(summary):
         )
         return response.choices[0].message["content"].strip()
     except Exception as e:
-        return f"(GPT-Fehler: {str(e)})"
+        return None  # Telegram erlaubt keine zu langen Nachrichten, daher kein Fehlertext
 
 # ✅ Zugang zum Kalender
+
 def load_credentials():
     with open("token.pkl", "rb") as token_file:
         creds = pickle.load(token_file)
     return creds
 
 # ✅ Termin zum Kalender hinzufügen
+
 def add_event_to_calendar(summary, start_time, end_time):
     try:
         creds = load_credentials()
@@ -90,6 +93,7 @@ def add_event_to_calendar(summary, start_time, end_time):
         return f"❌ Fehler beim Hinzufügen des Termins: {error}"
 
 # ✅ Liste aller Kalender abrufen
+
 def list_all_calendars():
     creds = load_credentials()
     service = build('calendar', 'v3', credentials=creds)
@@ -98,6 +102,7 @@ def list_all_calendars():
     return [(cal['summary'], cal['id']) for cal in calendars]
 
 # ✅ Events für ein bestimmtes Datum (mit Pagination)
+
 def get_events_for_date(target_date: datetime.datetime):
     creds = load_credentials()
     service = build('calendar', 'v3', credentials=creds)
@@ -134,6 +139,7 @@ def get_events_for_date(target_date: datetime.datetime):
     return all_events
 
 # ✅ Aufgabe zu Todoist hinzufügen
+
 def add_task_to_todoist(content, due_string="today"):
     try:
         headers = {
@@ -152,6 +158,7 @@ def add_task_to_todoist(content, due_string="today"):
         return f"❌ Ausnahme beim Hinzufügen zu Todoist: {e}"
 
 # Todoist auflisten
+
 def get_todoist_tasks():
     try:
         headers = {
@@ -168,7 +175,7 @@ def get_todoist_tasks():
         if not tasks:
             return "✅ Keine Aufgaben für heute oder überfällig."
 
-        result = "📝 Aufgaben für heute / überfällig:\n\n"
+        result = "\n📝 Aufgaben für heute / überfällig:\n"
         for task in tasks:
             due = task.get("due", {}).get("string", "kein Datum")
             result += f"- {task['content']} ({due})\n"
@@ -178,16 +185,19 @@ def get_todoist_tasks():
         return f"❌ Fehler beim Abrufen der Aufgaben: {e}"
 
 # ✅ Ausgabe generieren mit optionalem GPT-Briefing
+
 def generate_event_summary(date: datetime.datetime):
     calendars_with_events = get_events_for_date(date)
-    if not calendars_with_events:
-        response = f"📅 Keine Termine am {date.strftime('%d.%m.%Y')}."
-    else:
-        response = f"📅 Termine am {date.strftime('%d.%m.%Y')}:\n\n"
-        tz = pytz.timezone("Europe/Berlin")
+    tz = pytz.timezone("Europe/Berlin")
 
+    chunks = []
+
+    if not calendars_with_events:
+        chunks.append(f"📅 Keine Termine am {date.strftime('%d.%m.%Y')}.")
+    else:
+        chunks.append(f"📅 Termine am {date.strftime('%d.%m.%Y')}:")
         for name, events in calendars_with_events:
-            response += f"🗓️ {name}:\n"
+            text = f"\n🗓️ {name}:"
             for event in events:
                 start_raw = event['start'].get('dateTime', event['start'].get('date'))
                 try:
@@ -198,24 +208,24 @@ def generate_event_summary(date: datetime.datetime):
                     start_time = "Ganztägig"
 
                 summary = event.get('summary', 'Kein Titel')
+                text += f"\n- {start_time}: {summary}"
                 briefing = generate_chatgpt_briefing(summary)
-                response += f"- {start_time}: {summary}\n"
                 if briefing:
-                    response += f"  💬 {briefing}\n"
-            response += "\n"
+                    text += f"\n  💬 {briefing}"
+            chunks.append(text)
 
-    # Todoist-Teil hinzufügen
     todo_response = get_todoist_tasks()
-    response += "\n" + todo_response
+    if todo_response:
+        chunks.append(todo_response)
 
-    return response
+    return chunks
 
 # ✅ Telegram-Kommandos
+
 async def frage(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         text = update.message.text.strip().lower()
 
-        # Sonderbegriffe manuell behandeln
         if "nächste woche" in text:
             today = datetime.datetime.now()
             next_monday = today + datetime.timedelta(days=(7 - today.weekday()))
@@ -233,7 +243,6 @@ async def frage(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await send_events_for_date(update, date)
             return
 
-        # Standard-NLP mit dateparser
         results = search_dates(text, languages=['de'])
         if not results:
             await update.message.reply_text("❌ Ich konnte kein Datum erkennen.")
@@ -241,7 +250,6 @@ async def frage(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         parsed_date = results[0][1]
         parsed_date = parsed_date.replace(hour=0, minute=0, second=0, microsecond=0)
-
         await send_events_for_date(update, parsed_date)
 
     except Exception as e:
@@ -275,18 +283,22 @@ async def add_event(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"❌ Fehler beim Erstellen des Termins: {e}")
 
 async def send_events_for_date(update: Update, date: datetime.datetime):
-    summary = generate_event_summary(date)
-    await update.message.reply_text(summary)
+    chunks = generate_event_summary(date)
+    for chunk in chunks:
+        if chunk:
+            await update.message.reply_text(chunk[:4000])  # Telegram Limit
 
 async def send_daily_summary(bot: Bot):
     today = datetime.datetime.utcnow().astimezone(pytz.timezone("Europe/Berlin"))
-    message = generate_event_summary(today)
-    await bot.send_message(chat_id=CHAT_ID, text=f"Guten Morgen ☀️\n\n{message}")
+    chunks = generate_event_summary(today)
+    for chunk in chunks:
+        await bot.send_message(chat_id=CHAT_ID, text=chunk[:4000])
 
 async def send_evening_summary(bot: Bot):
     tomorrow = datetime.datetime.utcnow().astimezone(pytz.timezone("Europe/Berlin")) + datetime.timedelta(days=1)
-    message = generate_event_summary(tomorrow)
-    await bot.send_message(chat_id=CHAT_ID, text=f"Gute Nacht 🌙 Hier ist die Vorschau für morgen: {message}")
+    chunks = generate_event_summary(tomorrow)
+    for chunk in chunks:
+        await bot.send_message(chat_id=CHAT_ID, text=chunk[:4000])
 
 async def post_init(application):
     scheduler = AsyncIOScheduler(timezone="Europe/Berlin")
