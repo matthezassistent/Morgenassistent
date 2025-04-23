@@ -226,17 +226,12 @@ async def send_events_for_date(update: Update, date: datetime.datetime):
 async def send_daily_summary(bot: Bot):
     today = datetime.datetime.utcnow().astimezone(pytz.timezone("Europe/Berlin"))
     message = generate_event_summary(today)
-    await bot.send_message(chat_id=CHAT_ID, text=f"Guten Morgen ☀️
-
-{message}")
+    await bot.send_message(chat_id=CHAT_ID, text=f"Guten Morgen ☀️\n\n{message}")
 
 async def send_evening_summary(bot: Bot):
     tomorrow = datetime.datetime.utcnow().astimezone(pytz.timezone("Europe/Berlin")) + datetime.timedelta(days=1)
     message = generate_event_summary(tomorrow)
-    await bot.send_message(chat_id=CHAT_ID, text=f"Gute Nacht 🌙
-Hier ist die Vorschau für morgen:
-
-{message}")
+    await bot.send_message(chat_id=CHAT_ID, text=f"Gute Nacht 🌙 Hier ist die Vorschau für morgen: {message}")
 
 async def post_init(application):
     scheduler = AsyncIOScheduler(timezone="Europe/Berlin")
