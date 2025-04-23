@@ -4,6 +4,8 @@ import datetime
 import pickle
 import dateparser
 import pytz
+import openai
+import requests
 from dateutil import parser
 from dateparser.search import search_dates
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -31,7 +33,10 @@ if not os.path.exists("token.pkl"):
         print("⚠️ Keine TOKEN_PKL_BASE64-Variable gefunden.")
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-CHAT_ID = 8011259706  # ✅ deine Telegram-Chat-ID
+CHAT_ID = 8011259706
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+TODOIST_API_TOKEN = os.getenv("TODOIST_API_TOKEN")
+openai.api_key = OPENAI_API_KEY
 
 # ✅ Zugang zum Kalender
 def load_credentials():
@@ -83,17 +88,54 @@ def get_events_for_date(target_date: datetime.datetime):
 
     return all_events
 
-# ✅ Ausgabe generieren
+# ✅ Briefing zu einem Event mit ChatGPT (nur wenn Code "691" enthalten ist)
+def generate_chatgpt_briefing(event_summary):
+    if "691" not in event_summary:
+        return None
+    try:
+        response = openai.ChatCompletion.create(
+            model="gpt-4",
+            messages=[
+                {"role": "system", "content": "Du bist ein hilfreicher Assistent, der kurze (maximal 5 Zeilen) Briefings zu bestimmten Kalenderterminen erstellt."},
+                {"role": "user", "content": f"Erstelle ein kurzes Briefing zu folgendem Termin: {event_summary}"}
+            ],
+            max_tokens=300
+        )
+        return response.choices[0].message.content.strip()
+    except Exception as e:
+        return f"⚠️ Briefing nicht möglich: {e}"
+
+# ✅ Aufgabe zu Todoist hinzufügen
+def add_task_to_todoist(content, due_string="today"):
+    try:
+        headers = {
+            "Authorization": f"Bearer {TODOIST_API_TOKEN}"
+        }
+        data = {
+            "content": content,
+            "due_string": due_string
+        }
+        response = requests.post("https://api.todoist.com/rest/v2/tasks", json=data, headers=headers)
+        if response.status_code == 200 or response.status_code == 204:
+            return "✅ Aufgabe wurde zu Todoist hinzugefügt."
+        else:
+            return f"❌ Fehler beim Hinzufügen zu Todoist: {response.text}"
+    except Exception as e:
+        return f"❌ Ausnahme beim Hinzufügen zu Todoist: {e}"
+
+# ✅ Ausgabe generieren mit optionalem GPT-Briefing
 def generate_event_summary(date: datetime.datetime):
     calendars_with_events = get_events_for_date(date)
     if not calendars_with_events:
         return f"\U0001F4C5 Keine Termine am {date.strftime('%d.%m.%Y')}."
 
-    response = f"\U0001F4C5 Termine am {date.strftime('%d.%m.%Y')}:\n\n"
+    response = f"\U0001F4C5 Termine am {date.strftime('%d.%m.%Y')}:
+\n"
     tz = pytz.timezone("Europe/Berlin")
 
     for name, events in calendars_with_events:
-        response += f"\U0001F5D3️ {name}:\n"
+        response += f"\U0001F5D3️ {name}:
+"
         for event in events:
             start_raw = event['start'].get('dateTime', event['start'].get('date'))
             try:
@@ -104,7 +146,10 @@ def generate_event_summary(date: datetime.datetime):
                 start_time = "Ganztägig"
 
             summary = event.get('summary', 'Kein Titel')
+            briefing = generate_chatgpt_briefing(summary)
             response += f"- {start_time}: {summary}\n"
+            if briefing:
+                response += f"  💬 {briefing}\n"
         response += "\n"
     return response
 
@@ -132,6 +177,15 @@ async def frage(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         print(f"⚠️ Fehler in frage(): {e}")
         await update.message.reply_text("⚠️ Da ist etwas schiefgelaufen beim Verarbeiten deiner Anfrage.")
+
+# ✅ Neue Funktion zum Hinzufügen von Todoist-Aufgaben über Befehl
+async def add_todoist(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    content = update.message.text.replace("/todo ", "").strip()
+    if not content:
+        await update.message.reply_text("❗ Gib bitte den Inhalt der Aufgabe an: /todo [Aufgabe]")
+        return
+    result = add_task_to_todoist(content)
+    await update.message.reply_text(result)
 
 async def send_events_for_date(update: Update, date: datetime.datetime):
     summary = generate_event_summary(date)
@@ -165,6 +219,7 @@ def main():
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("tomorrow", tomorrow))
+    app.add_handler(CommandHandler("todo", add_todoist))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, frage))
 
     app.run_polling()
