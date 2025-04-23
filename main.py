@@ -247,6 +247,11 @@ async def add_todoist(update: Update, context: ContextTypes.DEFAULT_TYPE):
     result = add_task_to_todoist(content)
     await update.message.reply_text(result)
 
+# zusatz von todoist
+async def list_todoist(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    result = get_todoist_tasks()
+    await update.message.reply_text(result)
+
 # ✅ Neue Funktion zum Hinzufügen von Kalender-Terminen über Befehl
 async def add_event(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.replace("/termin ", "").strip()
