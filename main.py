@@ -287,15 +287,23 @@ async def post_init(application):
     print("🕒 Scheduler gestartet")
 
 # ✅ Bot starten
+
 def main():
     print("👀 Bot gestartet und wartet auf Nachrichten.")
+
     app = ApplicationBuilder().token(BOT_TOKEN).post_init(post_init).build()
+
+    # Handler für Telegram-Befehle
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("tomorrow", tomorrow))
     app.add_handler(CommandHandler("todo", add_todoist))
     app.add_handler(CommandHandler("termin", add_event))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, frage))
-    app.run_polling()
+    app.add_handler(CommandHandler("todos", list_todoist))  # falls du den eingebaut hast
 
+    # Alle anderen Textnachrichten
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, frage))
+
+    # Bot starten (Polling-Modus)
+    app.run_polling()
 if __name__ == '__main__':
     main()
