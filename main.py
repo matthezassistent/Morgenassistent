@@ -49,11 +49,8 @@ def generate_chatgpt_briefing(event_summary):
     if "691" not in event_summary:
         return None
     try:
-        # Set API key globally
-        openai.api_key = OPENAI_API_KEY  # Set the API key here, once
-
-        # Use ChatCompletion instead of completions
-        response = openai.ChatCompletion.create(
+        client = openai.OpenAI(api_key=OPENAI_API_KEY)
+        response = client.chat.completions.create(
             model="gpt-4",
             messages=[
                 {"role": "system", "content": "Du bist ein hilfreicher Assistent, der kurze (maximal 5 Zeilen) Briefings zu bestimmten Kalenderterminen erstellt."},
@@ -61,7 +58,7 @@ def generate_chatgpt_briefing(event_summary):
             ],
             max_tokens=300
         )
-        return response.choices[0].message['content'].strip()  # Correct way to access content
+        return response.choices[0].message.content.strip()
     except Exception as e:
         return f"⚠️ Briefing nicht möglich: {e}"
 
