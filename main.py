@@ -341,7 +341,14 @@ FERIENTAGE = [
     (datetime.date(2025, 12, 24), datetime.date(2026, 1, 6)),  # Weihnachtsferien
 ]
 
-def ist_schultag(): heute = datetime.date.today() if heute.weekday() >= 5:  # Samstag (5), Sonntag (6) return False for start, ende in FERIENTAGE: if start <= heute <= ende: return False return True
+def ist_schultag(): 
+    heute = datetime.date.today() 
+    if heute.weekday() >= 5:  # Samstag (5), Sonntag (6) 
+        return False 
+    for start, ende in FERIENTAGE: 
+        if start <= heute <= ende: 
+            return False 
+    return True
 
 # ✅ Zugstatus aus ÖBB Scotty API holen (vereinfachte Demo mit Dummy-Daten)
 
