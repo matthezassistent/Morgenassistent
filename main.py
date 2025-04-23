@@ -145,7 +145,8 @@ def generate_event_summary(date: datetime.datetime):
     if not calendars_with_events:
         return f"📅 Keine Termine am {date.strftime('%d.%m.%Y')}."
 
-    response = f"📅 Termine am {date.strftime('%d.%m.%Y')}:
+response = f"📅 Termine am {date.strftime('%d.%m.%Y')}:\n\n"
+
 
 "
     tz = pytz.timezone("Europe/Berlin")
