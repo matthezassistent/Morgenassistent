@@ -127,15 +127,13 @@ def add_task_to_todoist(content, due_string="today"):
 def generate_event_summary(date: datetime.datetime):
     calendars_with_events = get_events_for_date(date)
     if not calendars_with_events:
-        return f"\U0001F4C5 Keine Termine am {date.strftime('%d.%m.%Y')}."
+        return f"📅 Keine Termine am {date.strftime('%d.%m.%Y')}."
 
-    response = f"\U0001F4C5 Termine am {date.strftime('%d.%m.%Y')}:
-\n"
+    response = f"📅 Termine am {date.strftime('%d.%m.%Y')}:\n\n"
     tz = pytz.timezone("Europe/Berlin")
 
     for name, events in calendars_with_events:
-        response += f"\U0001F5D3️ {name}:
-"
+        response += f"🗓️ {name}:\n"
         for event in events:
             start_raw = event['start'].get('dateTime', event['start'].get('date'))
             try:
@@ -155,7 +153,7 @@ def generate_event_summary(date: datetime.datetime):
 
 # ✅ Telegram-Kommandos
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("\U0001F44B Hallo! Ich bin dein Kalenderassistent.\nFrag mich z. B. 'Was ist morgen?'")
+    await update.message.reply_text("👋 Hallo! Ich bin dein Kalenderassistent.\nFrag mich z. B. 'Was ist morgen?'")
     await update.message.reply_text(f"✅ Deine Chat-ID ist: {update.effective_chat.id}")
 
 async def tomorrow(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -200,7 +198,7 @@ async def send_daily_summary(bot: Bot):
 async def send_evening_summary(bot: Bot):
     tomorrow = datetime.datetime.utcnow().astimezone(pytz.timezone("Europe/Berlin")) + datetime.timedelta(days=1)
     message = generate_event_summary(tomorrow)
-    await bot.send_message(chat_id=CHAT_ID, text=f"Gute Nacht \U0001F319\nHier ist die Vorschau für morgen:\n\n{message}")
+    await bot.send_message(chat_id=CHAT_ID, text=f"Gute Nacht 🌙\nHier ist die Vorschau für morgen:\n\n{message}")
 
 # ✅ Scheduler wird beim Start des Bots aktiviert
 async def post_init(application):
