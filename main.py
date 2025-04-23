@@ -302,6 +302,7 @@ async def send_evening_summary(bot: Bot):
 
 
 async def post_init(application):
+    await asyncio.sleep(1)
     scheduler = AsyncIOScheduler(timezone="Europe/Berlin")
     bot = application.bot
     scheduler.add_job(send_daily_summary, 'cron', hour=6, minute=20, args=[bot])
