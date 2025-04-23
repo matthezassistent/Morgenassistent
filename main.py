@@ -289,22 +289,23 @@ async def send_events_for_date(update: Update, date: datetime.datetime):
             await update.message.reply_text(chunk[:4000])  # Telegram Limit
 
 async def send_daily_summary(bot: Bot):
-    today = datetime.datetime.utcnow().astimezone(pytz.timezone("Europe/Berlin"))
+    today = datetime.datetime.utcnow().astimezone(datetime.timezone(datetime.timedelta(hours=2)))
     chunks = generate_event_summary(today)
     for chunk in chunks:
         await bot.send_message(chat_id=CHAT_ID, text=chunk[:4000])
 
 async def send_evening_summary(bot: Bot):
-    tomorrow = datetime.datetime.utcnow().astimezone(pytz.timezone("Europe/Berlin")) + datetime.timedelta(days=1)
+    tomorrow = datetime.datetime.utcnow().astimezone(datetime.timezone(datetime.timedelta(hours=2))) + datetime.timedelta(days=1)
     chunks = generate_event_summary(tomorrow)
     for chunk in chunks:
         await bot.send_message(chat_id=CHAT_ID, text=chunk[:4000])
+
 
 async def post_init(application):
     scheduler = AsyncIOScheduler(timezone="Europe/Berlin")
     bot = application.bot
     scheduler.add_job(send_daily_summary, 'cron', hour=6, minute=20, args=[bot])
-    scheduler.add_job(send_evening_summary, 'cron', hour=21, minute=0, args=[bot])
+    scheduler.add_job(send_evening_summary, 'cron', hour=23, minute=0, args=[bot])
     scheduler.start()
     print("🕒 Scheduler gestartet")
 
