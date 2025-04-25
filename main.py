@@ -175,6 +175,114 @@ async def get_fixed_train_status(fixed_time: str):
         return f"- {dep} Hallein: {status} (Gleis {platform})"
     return f"🚆 Keine Verbindung um {fixed_time} gefunden."
 
+# ✅ /termin Befehl: Flexible Sprache + Bestätigung
+
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+
+pending_events = {}  # Zwischenspeicher für Benutzeranfragen
+
+async def parse_event(text):
+    try:
+        # Einfache Heuristik: Erkennung von Zeit und Datum
+        found_dates = search_dates(text, languages=['de'])
+        if not found_dates:
+            return None
+
+        # Erste gefundene Zeit/Daten nehmen
+        start_dt = found_dates[0][1]
+
+        # Suche nach Zeitraum, falls angegeben (z.B. 16:00-18:00)
+        if "-" in text:
+            times = text.split("-")
+            if len(times) >= 2:
+                try:
+                    start_time = parser.parse(times[0], fuzzy=True)
+                    end_time = parser.parse(times[1], fuzzy=True)
+                    start_dt = start_dt.replace(hour=start_time.hour, minute=start_time.minute)
+                    end_dt = start_dt.replace(hour=end_time.hour, minute=end_time.minute)
+                except:
+                    end_dt = start_dt + datetime.timedelta(hours=1)
+            else:
+                end_dt = start_dt + datetime.timedelta(hours=1)
+        else:
+            end_dt = start_dt + datetime.timedelta(hours=1)
+
+        # Ort erkennen (alles nach "in" oder "bei")
+        ort = None
+        if " in " in text:
+            ort = text.split(" in ")[-1]
+        elif " bei " in text:
+            ort = text.split(" bei ")[-1]
+
+        # Titel aus Text extrahieren (ganz grob)
+        title = text.split(" findet")[0] if " findet" in text else text.split(" am")[0]
+
+        return {
+            "title": title.strip(),
+            "start": start_dt,
+            "end": end_dt,
+            "location": ort.strip() if ort else None
+        }
+    except Exception as e:
+        print(f"⚠️ Fehler beim Parsen: {e}")
+        return None
+
+async def termin(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    text = update.message.text.replace("/termin", "").strip()
+
+    parsed = await parse_event(text)
+    if not parsed:
+        await update.message.reply_text("❌ Konnte den Termin nicht verstehen. Bitte genaue Angaben machen.")
+        return
+
+    # Speichern im pending_events
+    pending_events[user_id] = parsed
+
+    # Zusammenfassung
+    message = f"📅 **Geplanter Termin:**\n\nTitel: {parsed['title']}\nStart: {parsed['start'].strftime('%d.%m.%Y %H:%M')}\nEnde: {parsed['end'].strftime('%d.%m.%Y %H:%M')}"
+    if parsed.get("location"):
+        message += f"\nOrt: {parsed['location']}"
+
+    # Bestätigungs-Buttons
+    buttons = [
+        [InlineKeyboardButton("✅ Ja, eintragen", callback_data="confirm"),
+         InlineKeyboardButton("❌ Nein, abbrechen", callback_data="cancel")]
+    ]
+    reply_markup = InlineKeyboardMarkup(buttons)
+
+    await update.message.reply_text(message, reply_markup=reply_markup, parse_mode="Markdown")
+
+async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    user_id = query.from_user.id
+
+    if query.data == "confirm" and user_id in pending_events:
+        parsed = pending_events.pop(user_id)
+
+        try:
+            # Eintrag in Google Kalender
+            creds = load_credentials()
+            service = build('calendar', 'v3', credentials=creds)
+            event = {
+                'summary': parsed['title'],
+                'start': {'dateTime': parsed['start'].isoformat(), 'timeZone': 'Europe/Berlin'},
+                'end': {'dateTime': parsed['end'].isoformat(), 'timeZone': 'Europe/Berlin'},
+            }
+            if parsed.get("location"):
+                event['location'] = parsed["location"]
+
+            service.events().insert(calendarId='primary', body=event).execute()
+            await query.edit_message_text("✅ Termin wurde erfolgreich in deinen Kalender eingetragen!")
+        except Exception as e:
+            print(f"❌ Fehler beim Eintragen: {e}")
+            await query.edit_message_text("❌ Fehler beim Eintragen des Termins.")
+    else:
+        if user_id in pending_events:
+            pending_events.pop(user_id)
+        await query.edit_message_text("❌ Termin wurde verworfen.")
+
 # ✅ Telegramm Kommandos
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -235,6 +343,8 @@ def main():
     app.add_handler(CommandHandler("zug", zug))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, frage))
     app.run_polling()
-
+    app.add_handler(CommandHandler("termin", termin))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, frage))
+    app.add_handler(telegram.ext.CallbackQueryHandler(button_handler))
 if __name__ == '__main__':
     main()
