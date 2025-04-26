@@ -25,7 +25,7 @@ from telegram.ext import (
 )
 
 from pyhafas import HafasClient
-from pyhafas.profiles import OebbProfile
+from pyhafas.profile import OebbProfile
 
 # ✅ token.pkl erzeugen (falls nötig)
 if not os.path.exists("token.pkl"):
