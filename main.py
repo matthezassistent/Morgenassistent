@@ -315,6 +315,13 @@ async def zug(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"🚆 Aktueller Zugstatus:\n\n{message}")
     except Exception as e:
         await update.message.reply_text(f"⚠️ Fehler bei der Zugabfrage:\n{e}")
+
+async def send_morning_train_update(bot: Bot):
+    try:
+        message = await get_next_train_status()
+        await bot.send_message(chat_id=CHAT_ID, text=f"🚆 Morgen-Update:\n\n{message}")
+    except Exception as e:
+        await bot.send_message(chat_id=CHAT_ID, text=f"⚠️ Fehler beim Morgen-Update:\n{e}")
         
 async def post_init(application):
     await asyncio.sleep(1)
