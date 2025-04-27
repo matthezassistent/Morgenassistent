@@ -146,67 +146,51 @@ def generate_event_summary(date):
     if todo:
         summary.append("📝 Aufgaben:\n" + todo)
     return summary
-
-async def zug(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    
+def get_next_trains():
     try:
-        await update.message.reply_text("🔎 Suche nach nächsten Zügen...")
+        url = "https://fahrplan.oebb.at/bin/stboard.exe/dn?input=Hallein&boardType=dep&time=now&maxJourneys=20"
+        headers = {
+            "User-Agent": "Mozilla/5.0"
+        }
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
 
-        now = datetime.datetime.now(pytz.timezone("Europe/Vienna"))
-        search_times = [now, now + datetime.timedelta(minutes=30)]
+        soup = BeautifulSoup(response.text, "html.parser")
 
-        for search_time in search_times:
-            time_str = search_time.strftime("%H:%M")
-            date_str = search_time.strftime("%d.%m.%Y")
+        # Alle Verbindungen auslesen
+        rows = soup.find_all("tr", class_="journey")
+        trains = []
 
-            payload = {
-                "start": "Suchen",
-                "REQ0JourneyStopsS0A": "1",
-                "REQ0JourneyStopsS0G": "Hallein",
-                "REQ0JourneyStopsZ0A": "1",
-                "REQ0JourneyStopsZ0G": "Salzburg Hbf",
-                "date": date_str,
-                "time": time_str,
-                "timesel": "departure",
-                "h2g-direct": "11:1111111111111111",
-            }
+        now = datetime.datetime.now()
 
-            headers = {
-                "User-Agent": "Mozilla/5.0",
-            }
+        for row in rows:
+            dep_time_text = row.find("td", class_="time").text.strip()
+            destination = row.find("td", class_="station").text.strip()
 
-            response = requests.post("https://fahrplan.oebb.at/bin/query.exe/dn", data=payload, headers=headers)
-
-            if response.status_code != 200:
+            try:
+                dep_time = datetime.datetime.strptime(dep_time_text, "%H:%M").replace(
+                    year=now.year, month=now.month, day=now.day
+                )
+            except:
                 continue
 
-            soup = BeautifulSoup(response.text, "html.parser")
-            connections = soup.find_all("div", class_="overviewConnection")
+            delta = (dep_time - now).total_seconds() / 60
 
-            if connections:
-                text = "🚆 **Gefundene Verbindungen Hallein → Salzburg Hbf:**\n"
-                for conn in connections[:2]:  # Maximal 2 Verbindungen anzeigen
-                    time_dep = conn.find("div", class_="timeDeparture").get_text(strip=True)
-                    time_arr = conn.find("div", class_="timeArrival").get_text(strip=True)
-                    platform = conn.find("span", class_="platform")
-                    platform_text = platform.get_text(strip=True) if platform else "?"
+            if 0 <= delta <= 30:  # Nur Abfahrten in den nächsten 30 Minuten
+                trains.append(f"**{dep_time.strftime('%H:%M')}** nach {destination}")
 
-                    delay_info = conn.find("span", class_="delay")
-                    delay_text = delay_info.get_text(strip=True) if delay_info else "pünktlich"
+        if not trains:
+            return "🚆 **Keine Züge in den nächsten 30 Minuten gefunden.**"
 
-                    text += (
-                        f"\nAbfahrt: {time_dep} Uhr (Gleis {platform_text})\n"
-                        f"Ankunft: {time_arr} Uhr\n"
-                        f"Status: {delay_text}\n"
-                        "-------------------------\n"
-                    )
-                await update.message.reply_text(text, parse_mode="Markdown")
-                return
-
-        await update.message.reply_text("❗ Keine Züge gefunden in den nächsten 60 Minuten.")
+        result = "🚆 **Nächste Verbindungen ab Hallein:**\n\n"
+        result += "\n".join(trains)
+        return result
 
     except Exception as e:
-        await update.message.reply_text(f"⚠️ Fehler bei der Zugabfrage:\n{e}")
-        
+        return f"⚠️ Fehler beim Zug-Update:\n{e}"
+
+
 # ✅ /termin Befehl: Flexible Sprache + Bestätigung
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
