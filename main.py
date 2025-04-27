@@ -150,45 +150,38 @@ import requests
 from bs4 import BeautifulSoup
 import datetime
 
-import requests
-from bs4 import BeautifulSoup
-import datetime
-
 async def zug(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        # Hole aktuelle Zeit
         now = datetime.datetime.now()
         time_str = now.strftime("%H:%M")
         date_str = now.strftime("%d.%m.%Y")
 
-        # Baue die Such-URL
         url = "https://fahrplan.oebb.at/bin/query.exe/dn"
         params = {
-            "S": "Hallein",  # Start
-            "Z": "Salzburg Hbf",  # Ziel
+            "S": "Hallein",
+            "Z": "Salzburg Hbf",
             "date": date_str,
             "time": time_str,
             "start": "Suchen",
-            "timesel": "depart"  # Abfahrten
+            "timesel": "depart"
         }
 
         headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"  # Fake Browser
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
         }
 
-        # Anfrage senden
         response = requests.get(url, params=params, headers=headers)
         response.raise_for_status()
 
+        from bs4 import BeautifulSoup
         soup = BeautifulSoup(response.text, "html.parser")
 
-        # Alle Verbindungen extrahieren
         connections = soup.select(".result")
         if not connections:
-            await update.message.reply_text("❗ Keine Verbindungen gefunden.")
+            await update.message.reply_text("🚆 Keine Verbindungen gefunden.", parse_mode="Markdown")
             return
 
-        text = "🚆 **Nächste Verbindungen Hallein → Salzburg Hbf:**\n"
+        text = "🚆 **Aktuelle Verbindungen Hallein → Salzburg Hbf:**\n"
 
         count = 0
         for conn in connections:
@@ -212,7 +205,10 @@ async def zug(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     except Exception as e:
         await update.message.reply_text(f"⚠️ Fehler bei der Zugabfrage:\n{e}")
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+        
+        
+        
+        from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 pending_events = {}  # Zwischenspeicher für Benutzeranfragen
 
@@ -334,9 +330,6 @@ async def frage(update: Update, context: ContextTypes.DEFAULT_TYPE):
     for chunk in chunks:
         await update.message.reply_text(chunk[:4000])
 
-async def zug(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    message = await get_next_departures_text()
-    await update.message.reply_text(message, parse_mode="Markdown")
     
 async def send_daily_summary(bot: Bot):
     today = datetime.datetime.utcnow().astimezone(pytz.timezone("Europe/Berlin"))
