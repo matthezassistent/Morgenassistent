@@ -151,7 +151,7 @@ def get_next_trains():
     try:
         now = datetime.datetime.now()
         response = requests.get(
-            f"https://v5.transport.rest/journeys?from={HALLEIN_ID}&to={SALZBURG_ID}&results=3&departure={now.isoformat()}",
+            f"https://v3.transport.rest/journeys?from={HALLEIN_ID}&to={SALZBURG_ID}&results=3&departure={now.isoformat()}",
             timeout=10
         )
         response.raise_for_status()
