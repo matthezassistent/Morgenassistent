@@ -151,6 +151,10 @@ import requests
 from bs4 import BeautifulSoup
 import datetime
 
+import requests
+from bs4 import BeautifulSoup
+import datetime
+
 def get_next_trains():
     try:
         url = "https://fahrplan.oebb.at/bin/stboard.exe/dn?input=Hallein&boardType=dep&start=yes"
@@ -171,6 +175,7 @@ def get_next_trains():
             time_cell = row.find("td", class_="time")
             station_cell = row.find("td", class_="station")
             route_cell = row.find("td", class_="route")
+            train_cell = row.find("td", class_="train")  # Neu: Zug-/Busnummer
 
             if not time_cell or not station_cell or not route_cell:
                 continue
@@ -178,6 +183,7 @@ def get_next_trains():
             dep_time_text = time_cell.get_text(strip=True)
             destination = station_cell.get_text(strip=True)
             via_text = route_cell.get_text(strip=True).lower()
+            line_text = train_cell.get_text(strip=True) if train_cell else "?"
 
             try:
                 dep_time = datetime.datetime.strptime(dep_time_text, "%H:%M").replace(
@@ -189,20 +195,21 @@ def get_next_trains():
             delta = (dep_time - now).total_seconds() / 60
 
             if 0 <= delta <= 45:
-                # Prüfen: fährt entweder direkt nach Salzburg oder via Salzburg
-                if "salzburg hbf" in destination.lower() or "salzburg" in via_text:
-                    trains.append(f"**{dep_time.strftime('%H:%M')}** ➔ {destination}")
+                # Ziel oder Zwischenziel Salzburg
+                if "salzburg" in destination.lower() or "salzburg" in via_text:
+                    trains.append(
+                        f"**{dep_time.strftime('%H:%M')}** ➔ {destination} (Linie {line_text})"
+                    )
 
         if not trains:
-            return "🚆 **Keine passenden Züge Richtung Salzburg in den nächsten 45 Minuten gefunden.**"
+            return "🚆 **Keine passenden Verbindungen Richtung Salzburg in den nächsten 45 Minuten gefunden.**"
 
-        result = "🚆 **Nächste Verbindungen Hallein → Salzburg Hbf:**\n\n"
+        result = "🚍 **Nächste Abfahrten Hallein → Salzburg:**\n\n"
         result += "\n".join(trains)
         return result
 
     except Exception as e:
-        return f"⚠️ Fehler beim Zug-Update:\n{e}"
-
+        return f"⚠️ Fehler beim Zug-/Bus-Update:\n{e}"
 # ✅ /termin Befehl: Flexible Sprache + Bestätigung
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
