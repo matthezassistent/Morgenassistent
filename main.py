@@ -23,6 +23,9 @@ from telegram.ext import (
     MessageHandler,
     filters
 )
+import requests
+from bs4 import BeautifulSoup
+import datetime
 
 
 # ✅ token.pkl erzeugen (falls nötig)
@@ -143,46 +146,59 @@ def generate_event_summary(date):
         summary.append("📝 Aufgaben:\n" + todo)
     return summary
 
-# IDs der Bahnhöfe: Hallein und Salzburg Hbf
-HALLEIN_ID = "8100136"
-SALZBURG_ID = "8100013"
+def get_next_train_status():
+    url = "https://fahrplan.oebb.at/bin/query.exe/dn"
 
-def get_next_trains():
-    try:
-        now = datetime.datetime.now()
-        response = requests.get(
-            f"https://v3.transport.rest/journeys?from={HALLEIN_ID}&to={SALZBURG_ID}&results=3&departure={now.isoformat()}",
-            timeout=10
-        )
-        response.raise_for_status()
-        data = response.json()
+    params = {
+        "start": "1",
+        "L": "vs_scotty",
+        "date": datetime.date.today().strftime("%d.%m.%Y"),
+        "time": datetime.datetime.now().strftime("%H:%M"),
+        "input": "Hallein",
+        "inputStation": "Hallein",
+        "output": "Salzburg Hbf",
+        "outputStation": "Salzburg Hbf",
+        "REQ0JourneyStopsS0A": "1",
+        "REQ0JourneyStopsZ0A": "1",
+        "REQ0JourneyProduct_prod_list": "11:1111111111111111"
+    }
 
-        if not data.get("journeys"):
-            return "🚆 Keine Verbindungen gefunden."
+    headers = {
+        "User-Agent": "Mozilla/5.0"
+    }
 
-        message = "🚆 **Nächste Verbindungen Hallein → Salzburg Hbf**\n"
-        for journey in data["journeys"][:2]:  # nur die ersten 2
-            dep = journey["legs"][0]["departure"]
-            arr = journey["legs"][0]["arrival"]
-            planned_dep = datetime.datetime.fromisoformat(dep["planned"]).strftime("%H:%M")
-            planned_arr = datetime.datetime.fromisoformat(arr["planned"]).strftime("%H:%M")
-            platform = dep.get("platform", "?")
-            delay = dep.get("delay", 0)
+    response = requests.get(url, params=params, headers=headers)
+    soup = BeautifulSoup(response.text, "html.parser")
 
-            delay_text = f"+{delay} Min." if delay else "pünktlich"
+    results = []
 
-            message += (
-                f"\nAbfahrt: {planned_dep} (Gleis {platform})\n"
-                f"Ankunft: {planned_arr}\n"
-                f"Status: {delay_text}\n"
-                "------------------------\n"
-            )
+    departures = soup.select(".result")  # Alle Ergebnisse
+    for dep in departures[:2]:  # Nur die nächsten 2 Verbindungen
+        time_element = dep.select_one(".time")
+        delay_element = dep.select_one(".delay")
+        platform_element = dep.select_one(".platform")
 
-        return message
+        if time_element:
+            time = time_element.get_text(strip=True)
+        else:
+            time = "?"
 
-    except Exception as e:
-        return f"⚠️ Fehler bei der Zugabfrage:\n{e}"
+        if delay_element:
+            delay_text = delay_element.get_text(strip=True)
+        else:
+            delay_text = "pünktlich"
 
+        if platform_element:
+            platform = platform_element.get_text(strip=True)
+        else:
+            platform = "?"
+
+        results.append(f"- Abfahrt um {time} Uhr (Gleis {platform}, {delay_text})")
+
+    if not results:
+        return "🚆 Keine aktuellen Züge gefunden."
+
+    return "🚆 Nächste Züge Hallein → Salzburg:\n" + "\n".join(results)
     
 # ✅ /termin Befehl: Flexible Sprache + Bestätigung
 
@@ -309,9 +325,12 @@ async def frage(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(chunk[:4000])
 
 async def zug(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    message = get_next_trains()
-    await update.message.reply_text(message, parse_mode="Markdown")# ✅ Automatische Scheduler Aufgaben
-
+    try:
+        message = get_next_train_status()
+        await update.message.reply_text(message)
+    except Exception as e:
+        await update.message.reply_text(f"⚠️ Fehler bei der Zugabfrage:\n{e}")
+        
 async def send_daily_summary(bot: Bot):
     today = datetime.datetime.utcnow().astimezone(pytz.timezone("Europe/Berlin"))
     chunks = generate_event_summary(today)
