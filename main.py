@@ -344,7 +344,7 @@ async def frage(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def zug(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        message = get_next_trains()
+        await zug(update, context)
         await update.message.reply_text(message, parse_mode="Markdown")
     except Exception as e:
         await update.message.reply_text(f"⚠️ Fehler bei der Zugabfrage:\n{e}")
@@ -362,8 +362,8 @@ async def send_evening_summary(bot: Bot):
         await bot.send_message(chat_id=CHAT_ID, text=chunk[:4000])
 
 async def send_morning_train_update(bot: Bot):
-    message = get_next_trains()
-    await bot.send_message(chat_id=CHAT_ID, text=message, parse_mode="Markdown")
+    await bot.send_message(chat_id=CHAT_ID, text="🚆 Bitte verwende /zug für aktuelle Abfahrten.")
+
     
 async def post_init(application):
     await asyncio.sleep(1)
