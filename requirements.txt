@@ -8,5 +8,3 @@ pytz
 apscheduler
 requests
 openai
-pyhafas
-hafas-client
