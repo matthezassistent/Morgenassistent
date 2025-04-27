@@ -150,40 +150,68 @@ import requests
 from bs4 import BeautifulSoup
 import datetime
 
-async def get_next_departures_text():
+import requests
+from bs4 import BeautifulSoup
+import datetime
+
+async def zug(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        url = "https://fahrplan.oebb.at/bin/stboard.exe/dn?input=Hallein&boardType=dep&time=now&maxJourneys=8&productsFilter=1111111111&start=yes&selectDate=today"
-        headers = {
-            "User-Agent": "Mozilla/5.0"
+        # Hole aktuelle Zeit
+        now = datetime.datetime.now()
+        time_str = now.strftime("%H:%M")
+        date_str = now.strftime("%d.%m.%Y")
+
+        # Baue die Such-URL
+        url = "https://fahrplan.oebb.at/bin/query.exe/dn"
+        params = {
+            "S": "Hallein",  # Start
+            "Z": "Salzburg Hbf",  # Ziel
+            "date": date_str,
+            "time": time_str,
+            "start": "Suchen",
+            "timesel": "depart"  # Abfahrten
         }
-        response = requests.get(url, headers=headers)
 
-        if response.status_code != 200:
-            return "❌ Fehler beim Abrufen der Abfahrten."
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"  # Fake Browser
+        }
 
-        text = response.text
+        # Anfrage senden
+        response = requests.get(url, params=params, headers=headers)
+        response.raise_for_status()
 
-        # Einfaches Parsing
-        departures = []
-        blocks = text.split('<td class="std-time">')[1:]
-        for block in blocks[:8]:  # Nur die ersten 8
-            try:
-                time = block.split('</td>')[0].strip()
-                destination = block.split('<td class="std-station">')[1].split('</td>')[0].strip()
-                line = block.split('<td class="std-train">')[1].split('</td>')[0].strip()
-                departures.append(f"**{time}** ➔ {destination} ({line})")
-            except Exception:
-                continue
+        soup = BeautifulSoup(response.text, "html.parser")
 
-        if not departures:
-            return "🚆 Keine aktuellen Abfahrten gefunden."
+        # Alle Verbindungen extrahieren
+        connections = soup.select(".result")
+        if not connections:
+            await update.message.reply_text("❗ Keine Verbindungen gefunden.")
+            return
 
-        result = "🚆 **Nächste Abfahrten ab Hallein:**\n\n" + "\n".join(departures)
-        return result
+        text = "🚆 **Nächste Verbindungen Hallein → Salzburg Hbf:**\n"
+
+        count = 0
+        for conn in connections:
+            if count >= 8:
+                break
+
+            dep_time = conn.select_one(".time").get_text(strip=True) if conn.select_one(".time") else "?"
+            arr_time = conn.select_one(".arrtime").get_text(strip=True) if conn.select_one(".arrtime") else "?"
+            train_type = conn.select_one(".means").get_text(strip=True) if conn.select_one(".means") else "?"
+            platform = conn.select_one(".platform").get_text(strip=True) if conn.select_one(".platform") else "?"
+
+            text += (
+                f"\n**{train_type}**\n"
+                f"Abfahrt: {dep_time} Uhr (Gleis {platform})\n"
+                f"Ankunft: {arr_time} Uhr\n"
+                f"-------------------------\n"
+            )
+            count += 1
+
+        await update.message.reply_text(text, parse_mode="Markdown")
 
     except Exception as e:
-        return f"⚠️ Fehler beim Zugabruf:\n{e}"# ✅ /termin Befehl: Flexible Sprache + Bestätigung
-
+        await update.message.reply_text(f"⚠️ Fehler bei der Zugabfrage:\n{e}")
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 pending_events = {}  # Zwischenspeicher für Benutzeranfragen
