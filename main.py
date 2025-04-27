@@ -149,11 +149,15 @@ def generate_event_summary(date):
 def get_next_train_status():
     url = "https://fahrplan.oebb.at/bin/query.exe/dn"
 
+    now = datetime.datetime.now()
+    in_30_min = now + datetime.timedelta(minutes=30)
+
     params = {
         "start": "1",
         "L": "vs_scotty",
-        "date": datetime.date.today().strftime("%d.%m.%Y"),
-        "time": datetime.datetime.now().strftime("%H:%M"),
+        "date": now.strftime("%d.%m.%Y"),
+        "time": now.strftime("%H:%M"),
+        "timeMaxDeviation": "30",  # maximal 30 Minuten Abweichung (Scotty akzeptiert das)
         "input": "Hallein",
         "inputStation": "Hallein",
         "output": "Salzburg Hbf",
@@ -172,31 +176,34 @@ def get_next_train_status():
 
     results = []
 
-    departures = soup.select(".result")  # Alle Ergebnisse
-    for dep in departures[:2]:  # Nur die nächsten 2 Verbindungen
+    departures = soup.select(".journey")
+    if not departures:
+        departures = soup.select(".result")  # Fallback falls Struktur sich ändert
+
+    for dep in departures:
         time_element = dep.select_one(".time")
         delay_element = dep.select_one(".delay")
         platform_element = dep.select_one(".platform")
 
-        if time_element:
-            time = time_element.get_text(strip=True)
-        else:
-            time = "?"
+        if not time_element:
+            continue  # Ohne Zeit keine Info
 
-        if delay_element:
-            delay_text = delay_element.get_text(strip=True)
-        else:
-            delay_text = "pünktlich"
+        departure_time = time_element.get_text(strip=True)
 
-        if platform_element:
-            platform = platform_element.get_text(strip=True)
-        else:
-            platform = "?"
+        # Vergleiche: ist die Abfahrtszeit innerhalb der nächsten 30 Minuten?
+        dep_time_obj = datetime.datetime.strptime(departure_time, "%H:%M")
+        dep_time_today = now.replace(hour=dep_time_obj.hour, minute=dep_time_obj.minute, second=0, microsecond=0)
 
-        results.append(f"- Abfahrt um {time} Uhr (Gleis {platform}, {delay_text})")
+        if not now <= dep_time_today <= in_30_min:
+            continue  # nur innerhalb 30 Minuten
+
+        delay = delay_element.get_text(strip=True) if delay_element else "pünktlich"
+        platform = platform_element.get_text(strip=True) if platform_element else "?"
+
+        results.append(f"- Abfahrt {departure_time} Uhr (Gleis {platform}, {delay})")
 
     if not results:
-        return "🚆 Keine aktuellen Züge gefunden."
+        return "🚆 Keine Züge in den nächsten 30 Minuten gefunden."
 
     return "🚆 Nächste Züge Hallein → Salzburg:\n" + "\n".join(results)
     
