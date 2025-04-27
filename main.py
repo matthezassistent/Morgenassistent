@@ -14,7 +14,6 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from googleapiclient.discovery import build
 from google.oauth2.credentials import Credentials
 from googleapiclient.errors import HttpError
-
 from telegram import Update, Bot
 from telegram.ext import (
     ApplicationBuilder,
@@ -151,74 +150,39 @@ import requests
 from bs4 import BeautifulSoup
 import datetime
 
-import requests
-from bs4 import BeautifulSoup
-import datetime
-
-async def zug(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def get_next_departures_text():
     try:
-        now = datetime.datetime.now(pytz.timezone("Europe/Vienna"))
-        time_str = now.strftime("%H:%M")
-        date_str = now.strftime("%d.%m.%Y")
-
-        url = "https://fahrplan.oebb.at/bin/stboard.exe/dn"
-        params = {
-            "input": "Hallein",
-            "boardType": "dep",
-            "time": time_str,
-            "date": date_str,
-            "maxJourneys": "8",
-            "productsFilter": "1111111111111111",
-            "start": "yes"
-        }
+        url = "https://fahrplan.oebb.at/bin/stboard.exe/dn?input=Hallein&boardType=dep&time=now&maxJourneys=8&productsFilter=1111111111&start=yes&selectDate=today"
         headers = {
             "User-Agent": "Mozilla/5.0"
         }
+        response = requests.get(url, headers=headers)
 
-        response = requests.get(url, params=params, headers=headers)
-        response.raise_for_status()
-        html = response.text
+        if response.status_code != 200:
+            return "❌ Fehler beim Abrufen der Abfahrten."
 
-        # grobe Extraktion
-        entries = html.split('<tr class="journey">')[1:]
-        if not entries:
-            await update.message.reply_text("🚆 Keine Abfahrten gefunden.")
-            return
+        text = response.text
 
-        message = "🚆 **Nächste Abfahrten ab Hallein**\n\n"
-        count = 0
-
-        for entry in entries:
+        # Einfaches Parsing
+        departures = []
+        blocks = text.split('<td class="std-time">')[1:]
+        for block in blocks[:8]:  # Nur die ersten 8
             try:
-                time_part = entry.split('class="time">')[1].split('</td>')[0].strip()
-                line_part = entry.split('class="train">')[1].split('</td>')[0].strip()
-                direction_part = entry.split('class="direction">')[1].split('</td>')[0].strip()
-                try:
-                    platform_part = entry.split('class="platform">')[1].split('</td>')[0].strip()
-                except:
-                    platform_part = "?"
-
-                delay = ""
-                if "Verspätung" in entry:
-                    delay_text = entry.split('class="delay">')[1].split('</td>')[0].strip()
-                    delay = f" (+{delay_text})"
-
-                message += (
-                    f"**{time_part}** Uhr → {direction_part}\n"
-                    f"Linie: {line_part}, Gleis: {platform_part}{delay}\n\n"
-                )
-
-                count += 1
-                if count >= 8:
-                    break
+                time = block.split('</td>')[0].strip()
+                destination = block.split('<td class="std-station">')[1].split('</td>')[0].strip()
+                line = block.split('<td class="std-train">')[1].split('</td>')[0].strip()
+                departures.append(f"**{time}** ➔ {destination} ({line})")
             except Exception:
                 continue
 
-        await update.message.reply_text(message, parse_mode="Markdown")
+        if not departures:
+            return "🚆 Keine aktuellen Abfahrten gefunden."
+
+        result = "🚆 **Nächste Abfahrten ab Hallein:**\n\n" + "\n".join(departures)
+        return result
 
     except Exception as e:
-        await update.message.reply_text(f"⚠️ Fehler bei der Zugabfrage:\n{e}")
-# ✅ /termin Befehl: Flexible Sprache + Bestätigung
+        return f"⚠️ Fehler beim Zugabruf:\n{e}"# ✅ /termin Befehl: Flexible Sprache + Bestätigung
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
@@ -343,12 +307,9 @@ async def frage(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(chunk[:4000])
 
 async def zug(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    try:
-        await zug(update, context)
-        await update.message.reply_text(message, parse_mode="Markdown")
-    except Exception as e:
-        await update.message.reply_text(f"⚠️ Fehler bei der Zugabfrage:\n{e}")
-        
+    message = await get_next_departures_text()
+    await update.message.reply_text(message, parse_mode="Markdown")
+    
 async def send_daily_summary(bot: Bot):
     today = datetime.datetime.utcnow().astimezone(pytz.timezone("Europe/Berlin"))
     chunks = generate_event_summary(today)
@@ -362,8 +323,8 @@ async def send_evening_summary(bot: Bot):
         await bot.send_message(chat_id=CHAT_ID, text=chunk[:4000])
 
 async def send_morning_train_update(bot: Bot):
-    await bot.send_message(chat_id=CHAT_ID, text="🚆 Bitte verwende /zug für aktuelle Abfahrten.")
-
+    message = await get_next_departures_text()
+    await bot.send_message(chat_id=CHAT_ID, text=message, parse_mode="Markdown")
     
 async def post_init(application):
     await asyncio.sleep(1)
