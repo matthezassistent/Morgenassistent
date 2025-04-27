@@ -150,23 +150,16 @@ def generate_event_summary(date):
 def get_next_train_status():
     def fetch_trains(start_time):
         url = "https://fahrplan.oebb.at/bin/query.exe/dn"
-        in_30_min = start_time + datetime.timedelta(minutes=30)
-
         params = {
             "start": "1",
             "L": "vs_scotty",
             "date": start_time.strftime("%d.%m.%Y"),
             "time": start_time.strftime("%H:%M"),
-            "timeMaxDeviation": "30",
             "input": "Hallein",
-            "inputStation": "Hallein",
             "output": "Salzburg Hbf",
-            "outputStation": "Salzburg Hbf",
             "REQ0JourneyStopsS0A": "1",
             "REQ0JourneyStopsZ0A": "1",
-            "REQ0JourneyProduct_prod_list": "11:1111111111111111"
         }
-
         headers = {
             "User-Agent": "Mozilla/5.0"
         }
@@ -176,52 +169,41 @@ def get_next_train_status():
 
         results = []
 
-        departures = soup.select(".journey")
-        if not departures:
-            departures = soup.select(".result")
-
-        for dep in departures:
-            time_element = dep.select_one(".time")
-            delay_element = dep.select_one(".delay")
-            platform_element = dep.select_one(".platform")
-
-            if not time_element:
-                continue
-
-            departure_time = time_element.get_text(strip=True)
+        # Suche ALLE Uhrzeiten in der Seite
+        for time_tag in soup.find_all("span", class_="time"):
+            departure_time = time_tag.get_text(strip=True)
 
             try:
                 dep_time_obj = datetime.datetime.strptime(departure_time, "%H:%M")
                 dep_time_today = start_time.replace(hour=dep_time_obj.hour, minute=dep_time_obj.minute, second=0, microsecond=0)
-            except:
+            except Exception:
                 continue
 
-            if not start_time <= dep_time_today <= in_30_min:
-                continue
+            # Überprüfen: Abfahrt innerhalb 0–30 Minuten?
+            minutes_difference = (dep_time_today - start_time).total_seconds() / 60
 
-            delay = delay_element.get_text(strip=True) if delay_element else "pünktlich"
-            platform = platform_element.get_text(strip=True) if platform_element else "?"
-
-            results.append(f"- Abfahrt {departure_time} Uhr (Gleis {platform}, {delay})")
+            if 0 <= minutes_difference <= 30:
+                results.append(f"- Abfahrt um {departure_time} Uhr")
 
         return results
 
-    # --- Erster Versuch
+    # 1. Versuch: aktuelle Zeit
     now = datetime.datetime.now()
     results = fetch_trains(now)
 
     if results:
-        return "🚆 Nächste Züge Hallein → Salzburg:\n" + "\n".join(results)
+        return "🚆 Nächste Züge Hallein → Salzburg Hbf:\n" + "\n".join(results)
     
-    # --- Zweiter Versuch: 30 Minuten später
+    # 2. Versuch: +30 Minuten später
     later = now + datetime.timedelta(minutes=30)
     results_later = fetch_trains(later)
 
     if results_later:
-        return "🚆 Keine Züge in den nächsten 30 Minuten gefunden.\n\nAber hier ab +30 Minuten:\n" + "\n".join(results_later)
+        return "🚆 Keine Züge jetzt, aber in +30 Minuten:\n" + "\n".join(results_later)
 
-    return "🚆 Leider keine passenden Züge gefunden – auch in +30 Minuten nicht."
-    
+    return "🚆 Leider keine passenden Züge gefunden."
+
+
 # ✅ /termin Befehl: Flexible Sprache + Bestätigung
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
