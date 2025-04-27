@@ -292,9 +292,42 @@ async def frage(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(chunk[:4000])
 
 async def zug(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    status = await get_next_train()
-    await update.message.reply_text(status)
+    try:
+        now = datetime.datetime.now(pytz.timezone("Europe/Vienna"))
+        connections = hafas.connections(
+            origin="Hallein",
+            destination="Salzburg Hbf",
+            date=now,
+            max_changes=0
+        )
 
+        if not connections or not connections.connections:
+            await update.message.reply_text("🚆 Keine Verbindungen gefunden.")
+            return
+
+        text = "🚆 **Nächste Verbindungen Hallein → Salzburg Hbf**\n"
+
+        for conn in connections.connections[:2]:  # nur die nächsten 2 Verbindungen
+            dep = conn.departure
+            arr = conn.arrival
+            dep_time = dep.time.strftime("%H:%M") if dep else "?"
+            arr_time = arr.time.strftime("%H:%M") if arr else "?"
+            platform = dep.platform if dep and dep.platform else "?"
+            delay = dep.delay if dep and dep.delay else 0
+
+            delay_text = f"+{delay} Min." if delay else "pünktlich"
+
+            text += (
+                f"\nAbfahrt: {dep_time} Uhr (Gleis {platform})\n"
+                f"Ankunft: {arr_time} Uhr\n"
+                f"Status: {delay_text}\n"
+                "-------------------------\n"
+            )
+
+        await update.message.reply_text(text, parse_mode="Markdown")
+        
+    except Exception as e:
+        await update.message.reply_text(f"⚠️ Fehler bei der Zugabfrage:\n{e}")
 # ✅ Automatische Scheduler Aufgaben
 
 async def send_daily_summary(bot: Bot):
