@@ -150,65 +150,43 @@ import requests
 from bs4 import BeautifulSoup
 import datetime
 
-async def zug(update: Update, context: ContextTypes.DEFAULT_TYPE):
+import requests
+from datetime import datetime
+
+def get_departures_from_hallein(max_results=5):
+    url = "https://fahrplan.oebb.at/bin/stboard.exe/dn"
+    params = {
+        "input": "Hallein",
+        "boardType": "dep",
+        "maxJourneys": max_results,
+        "outputFormat": "JSON",
+    }
+
     try:
-        now = datetime.datetime.now()
-        time_str = now.strftime("%H:%M")
-        date_str = now.strftime("%d.%m.%Y")
-
-        url = "https://fahrplan.oebb.at/bin/query.exe/dn"
-        params = {
-            "S": "Hallein",
-            "Z": "Salzburg Hbf",
-            "date": date_str,
-            "time": time_str,
-            "start": "Suchen",
-            "timesel": "depart"
-        }
-
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
-        }
-
-        response = requests.get(url, params=params, headers=headers)
+        response = requests.get(url, params=params)
         response.raise_for_status()
+        data = response.json()
 
-        from bs4 import BeautifulSoup
-        soup = BeautifulSoup(response.text, "html.parser")
+        departures = data.get("departure", [])
+        if not departures:
+            return "Keine Abfahrten gefunden."
 
-        connections = soup.select(".result")
-        if not connections:
-            await update.message.reply_text("🚆 Keine Verbindungen gefunden.", parse_mode="Markdown")
-            return
+        message = "Nächste Abfahrten ab Hallein:\n"
+        for dep in departures:
+            time = dep["time"]
+            destination = dep["direction"]
+            train = dep.get("product", "Zug")
+            delay = dep.get("delay", 0)
 
-        text = "🚆 **Aktuelle Verbindungen Hallein → Salzburg Hbf:**\n"
+            dep_time = datetime.strptime(time, "%Y-%m-%dT%H:%M:%S").strftime("%H:%M")
+            delay_text = f" (+{delay} min)" if delay else ""
 
-        count = 0
-        for conn in connections:
-            if count >= 8:
-                break
+            message += f"- {train} nach {destination}: {dep_time}{delay_text}\n"
 
-            dep_time = conn.select_one(".time").get_text(strip=True) if conn.select_one(".time") else "?"
-            arr_time = conn.select_one(".arrtime").get_text(strip=True) if conn.select_one(".arrtime") else "?"
-            train_type = conn.select_one(".means").get_text(strip=True) if conn.select_one(".means") else "?"
-            platform = conn.select_one(".platform").get_text(strip=True) if conn.select_one(".platform") else "?"
-
-            text += (
-                f"\n**{train_type}**\n"
-                f"Abfahrt: {dep_time} Uhr (Gleis {platform})\n"
-                f"Ankunft: {arr_time} Uhr\n"
-                f"-------------------------\n"
-            )
-            count += 1
-
-        await update.message.reply_text(text, parse_mode="Markdown")
+        return message
 
     except Exception as e:
-        await update.message.reply_text(f"⚠️ Fehler bei der Zugabfrage:\n{e}")
-        
-        
-        
-        from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+        return f"Fehler bei der Abfahrtsabfrage: {e}"
 
 pending_events = {}  # Zwischenspeicher für Benutzeranfragen
 
