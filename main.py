@@ -26,6 +26,7 @@ from telegram.ext import (
 import requests
 from bs4 import BeautifulSoup
 import datetime
+import time
 
 
 # ✅ token.pkl erzeugen (falls nötig)
@@ -147,65 +148,79 @@ def generate_event_summary(date):
     return summary
 
 def get_next_train_status():
-    url = "https://fahrplan.oebb.at/bin/query.exe/dn"
+    def fetch_trains(start_time):
+        url = "https://fahrplan.oebb.at/bin/query.exe/dn"
+        in_30_min = start_time + datetime.timedelta(minutes=30)
 
+        params = {
+            "start": "1",
+            "L": "vs_scotty",
+            "date": start_time.strftime("%d.%m.%Y"),
+            "time": start_time.strftime("%H:%M"),
+            "timeMaxDeviation": "30",
+            "input": "Hallein",
+            "inputStation": "Hallein",
+            "output": "Salzburg Hbf",
+            "outputStation": "Salzburg Hbf",
+            "REQ0JourneyStopsS0A": "1",
+            "REQ0JourneyStopsZ0A": "1",
+            "REQ0JourneyProduct_prod_list": "11:1111111111111111"
+        }
+
+        headers = {
+            "User-Agent": "Mozilla/5.0"
+        }
+
+        response = requests.get(url, params=params, headers=headers)
+        soup = BeautifulSoup(response.text, "html.parser")
+
+        results = []
+
+        departures = soup.select(".journey")
+        if not departures:
+            departures = soup.select(".result")
+
+        for dep in departures:
+            time_element = dep.select_one(".time")
+            delay_element = dep.select_one(".delay")
+            platform_element = dep.select_one(".platform")
+
+            if not time_element:
+                continue
+
+            departure_time = time_element.get_text(strip=True)
+
+            try:
+                dep_time_obj = datetime.datetime.strptime(departure_time, "%H:%M")
+                dep_time_today = start_time.replace(hour=dep_time_obj.hour, minute=dep_time_obj.minute, second=0, microsecond=0)
+            except:
+                continue
+
+            if not start_time <= dep_time_today <= in_30_min:
+                continue
+
+            delay = delay_element.get_text(strip=True) if delay_element else "pünktlich"
+            platform = platform_element.get_text(strip=True) if platform_element else "?"
+
+            results.append(f"- Abfahrt {departure_time} Uhr (Gleis {platform}, {delay})")
+
+        return results
+
+    # --- Erster Versuch
     now = datetime.datetime.now()
-    in_30_min = now + datetime.timedelta(minutes=30)
+    results = fetch_trains(now)
 
-    params = {
-        "start": "1",
-        "L": "vs_scotty",
-        "date": now.strftime("%d.%m.%Y"),
-        "time": now.strftime("%H:%M"),
-        "timeMaxDeviation": "30",  # maximal 30 Minuten Abweichung (Scotty akzeptiert das)
-        "input": "Hallein",
-        "inputStation": "Hallein",
-        "output": "Salzburg Hbf",
-        "outputStation": "Salzburg Hbf",
-        "REQ0JourneyStopsS0A": "1",
-        "REQ0JourneyStopsZ0A": "1",
-        "REQ0JourneyProduct_prod_list": "11:1111111111111111"
-    }
+    if results:
+        return "🚆 Nächste Züge Hallein → Salzburg:\n" + "\n".join(results)
+    
+    # --- Zweiter Versuch: 30 Minuten später
+    later = now + datetime.timedelta(minutes=30)
+    results_later = fetch_trains(later)
 
-    headers = {
-        "User-Agent": "Mozilla/5.0"
-    }
+    if results_later:
+        return "🚆 Keine Züge in den nächsten 30 Minuten gefunden.\n\nAber hier ab +30 Minuten:\n" + "\n".join(results_later)
 
-    response = requests.get(url, params=params, headers=headers)
-    soup = BeautifulSoup(response.text, "html.parser")
-
-    results = []
-
-    departures = soup.select(".journey")
-    if not departures:
-        departures = soup.select(".result")  # Fallback falls Struktur sich ändert
-
-    for dep in departures:
-        time_element = dep.select_one(".time")
-        delay_element = dep.select_one(".delay")
-        platform_element = dep.select_one(".platform")
-
-        if not time_element:
-            continue  # Ohne Zeit keine Info
-
-        departure_time = time_element.get_text(strip=True)
-
-        # Vergleiche: ist die Abfahrtszeit innerhalb der nächsten 30 Minuten?
-        dep_time_obj = datetime.datetime.strptime(departure_time, "%H:%M")
-        dep_time_today = now.replace(hour=dep_time_obj.hour, minute=dep_time_obj.minute, second=0, microsecond=0)
-
-        if not now <= dep_time_today <= in_30_min:
-            continue  # nur innerhalb 30 Minuten
-
-        delay = delay_element.get_text(strip=True) if delay_element else "pünktlich"
-        platform = platform_element.get_text(strip=True) if platform_element else "?"
-
-        results.append(f"- Abfahrt {departure_time} Uhr (Gleis {platform}, {delay})")
-
-    if not results:
-        return "🚆 Keine Züge in den nächsten 30 Minuten gefunden."
-
-    return "🚆 Nächste Züge Hallein → Salzburg:\n" + "\n".join(results)
+    return "🚆 Leider keine passenden Züge gefunden – auch in +30 Minuten nicht."
     
 # ✅ /termin Befehl: Flexible Sprache + Bestätigung
 
