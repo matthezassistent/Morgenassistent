@@ -27,6 +27,8 @@ from telegram.ext import (
 from pyhafas import HafasClient
 from pyhafas.profile import DBProfile
 
+hafas=HafasClient(DBProfile())
+
 # ✅ token.pkl erzeugen (falls nötig)
 if not os.path.exists("token.pkl"):
     encoded_token = os.getenv("TOKEN_PKL_BASE64")
