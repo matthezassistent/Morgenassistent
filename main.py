@@ -147,61 +147,66 @@ def generate_event_summary(date):
         summary.append("📝 Aufgaben:\n" + todo)
     return summary
 
-def get_next_train_status():
-    def fetch_trains(start_time):
-        url = "https://fahrplan.oebb.at/bin/query.exe/dn"
-        params = {
-            "start": "1",
-            "L": "vs_scotty",
-            "date": start_time.strftime("%d.%m.%Y"),
-            "time": start_time.strftime("%H:%M"),
-            "input": "Hallein",
-            "output": "Salzburg Hbf",
-            "REQ0JourneyStopsS0A": "1",
-            "REQ0JourneyStopsZ0A": "1",
-        }
-        headers = {
-            "User-Agent": "Mozilla/5.0"
-        }
+async def zug(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        await update.message.reply_text("🔎 Suche nach nächsten Zügen...")
 
-        response = requests.get(url, params=params, headers=headers)
-        soup = BeautifulSoup(response.text, "html.parser")
+        now = datetime.datetime.now(pytz.timezone("Europe/Vienna"))
+        search_times = [now, now + datetime.timedelta(minutes=30)]
 
-        results = []
+        for search_time in search_times:
+            time_str = search_time.strftime("%H:%M")
+            date_str = search_time.strftime("%d.%m.%Y")
 
-        # Suche ALLE Uhrzeiten in der Seite
-        for time_tag in soup.find_all("span", class_="time"):
-            departure_time = time_tag.get_text(strip=True)
+            payload = {
+                "start": "Suchen",
+                "REQ0JourneyStopsS0A": "1",
+                "REQ0JourneyStopsS0G": "Hallein",
+                "REQ0JourneyStopsZ0A": "1",
+                "REQ0JourneyStopsZ0G": "Salzburg Hbf",
+                "date": date_str,
+                "time": time_str,
+                "timesel": "departure",
+                "h2g-direct": "11:1111111111111111",
+            }
 
-            try:
-                dep_time_obj = datetime.datetime.strptime(departure_time, "%H:%M")
-                dep_time_today = start_time.replace(hour=dep_time_obj.hour, minute=dep_time_obj.minute, second=0, microsecond=0)
-            except Exception:
+            headers = {
+                "User-Agent": "Mozilla/5.0",
+            }
+
+            response = requests.post("https://fahrplan.oebb.at/bin/query.exe/dn", data=payload, headers=headers)
+
+            if response.status_code != 200:
                 continue
 
-            # Überprüfen: Abfahrt innerhalb 0–30 Minuten?
-            minutes_difference = (dep_time_today - start_time).total_seconds() / 60
+            soup = BeautifulSoup(response.text, "html.parser")
+            connections = soup.find_all("div", class_="overviewConnection")
 
-            if 0 <= minutes_difference <= 30:
-                results.append(f"- Abfahrt um {departure_time} Uhr")
+            if connections:
+                text = "🚆 **Gefundene Verbindungen Hallein → Salzburg Hbf:**\n"
+                for conn in connections[:2]:  # Maximal 2 Verbindungen anzeigen
+                    time_dep = conn.find("div", class_="timeDeparture").get_text(strip=True)
+                    time_arr = conn.find("div", class_="timeArrival").get_text(strip=True)
+                    platform = conn.find("span", class_="platform")
+                    platform_text = platform.get_text(strip=True) if platform else "?"
 
-        return results
+                    delay_info = conn.find("span", class_="delay")
+                    delay_text = delay_info.get_text(strip=True) if delay_info else "pünktlich"
 
-    # 1. Versuch: aktuelle Zeit
-    now = datetime.datetime.now()
-    results = fetch_trains(now)
+                    text += (
+                        f"\nAbfahrt: {time_dep} Uhr (Gleis {platform_text})\n"
+                        f"Ankunft: {time_arr} Uhr\n"
+                        f"Status: {delay_text}\n"
+                        "-------------------------\n"
+                    )
+                await update.message.reply_text(text, parse_mode="Markdown")
+                return
 
-    if results:
-        return "🚆 Nächste Züge Hallein → Salzburg Hbf:\n" + "\n".join(results)
-    
-    # 2. Versuch: +30 Minuten später
-    later = now + datetime.timedelta(minutes=30)
-    results_later = fetch_trains(later)
+        await update.message.reply_text("❗ Keine Züge gefunden in den nächsten 60 Minuten.")
 
-    if results_later:
-        return "🚆 Keine Züge jetzt, aber in +30 Minuten:\n" + "\n".join(results_later)
+    except Exception as e:
+        await update.message.reply_text(f"⚠️ Fehler bei der Zugabfrage:\n{e}")
 
-    return "🚆 Leider keine passenden Züge gefunden."
 
 
 # ✅ /termin Befehl: Flexible Sprache + Bestätigung
