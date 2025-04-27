@@ -25,7 +25,7 @@ from telegram.ext import (
 )
 
 from pyhafas import HafasClient
-from pyhafas.profile import OebbProfile
+from pyhafas.profile import DBProfile
 
 # ✅ token.pkl erzeugen (falls nötig)
 if not os.path.exists("token.pkl"):
@@ -42,8 +42,7 @@ CHAT_ID = 8011259706
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 TODOIST_API_TOKEN = os.getenv("TODOIST_API_TOKEN")
 
-# Hafas Client (ÖBB)
-hafas_client = HafasClient(OebbProfile())
+hafas_client = HafasClient(DBProfile())
 
 # ✅ ChatGPT-Briefing generieren
 
@@ -147,34 +146,27 @@ def generate_event_summary(date):
         summary.append("📝 Aufgaben:\n" + todo)
     return summary
 
-# ✅ Zugstatus Scotty (ÖBB)
+# ✅ Zugstatus Scotty (DB)
 
-async def get_next_train():
+async def get_next_train_status():
     now = datetime.datetime.now()
-    connections = await hafas_client.connections("Hallein", "Salzburg Hbf", now)
-    if connections:
-        c = connections[0]
-        dep = c.departure.strftime("%H:%M")
-        arr = c.arrival.strftime("%H:%M")
-        delay = c.departure_delay or 0
-        status = "pünktlich" if delay == 0 else f"{delay} min verspätet"
-        platform = c.origin.platform or "?"
-        return f"🚆 {dep} Hallein → {arr} Salzburg Hbf, Gleis {platform}, {status}"
-    return "🚆 Keine Verbindung gefunden."
+    journeys = await hafas.departures(
+        station="8100059",  # Hallein (DB-HAFAS-ID)
+        date=now,
+        max_trips=5
+    )
 
-async def get_fixed_train_status(fixed_time: str):
-    today = datetime.datetime.now().date()
-    fixed_dt = datetime.datetime.strptime(fixed_time, "%H:%M").replace(year=today.year, month=today.month, day=today.day)
-    connections = await hafas_client.connections("Hallein", "Salzburg Hbf", fixed_dt)
-    if connections:
-        c = connections[0]
-        dep = c.departure.strftime("%H:%M")
-        delay = c.departure_delay or 0
-        status = "pünktlich" if delay == 0 else f"{delay} min verspätet"
-        platform = c.origin.platform or "?"
-        return f"- {dep} Hallein: {status} (Gleis {platform})"
-    return f"🚆 Keine Verbindung um {fixed_time} gefunden."
-
+    results = []
+    for journey in journeys:
+        if "Salzburg Hbf" in journey.destination.name:
+            planned = journey.planned_departure.strftime("%H:%M")
+            delay_min = (journey.departure - journey.planned_departure).total_seconds() / 60
+            delay_text = f"{int(delay_min)} min Verspätung" if delay_min > 0 else "pünktlich"
+            results.append(f"🚆 {planned} → Salzburg: {delay_text}")
+    if not results:
+        results.append("❌ Keine passende Verbindung gefunden.")
+    return "\n".join(results)
+    
 # ✅ /termin Befehl: Flexible Sprache + Bestätigung
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
@@ -317,12 +309,13 @@ async def send_evening_summary(bot: Bot):
     for chunk in chunks:
         await bot.send_message(chat_id=CHAT_ID, text=chunk[:4000])
 
-async def send_morning_train_update(bot: Bot):
-    status1 = await get_fixed_train_status("06:59")
-    status2 = await get_fixed_train_status("07:04")
-    message = "🚆 Zugstatus:\n\n" + status1 + "\n" + status2
-    await bot.send_message(chat_id=CHAT_ID, text=message)
-
+async def zug(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        message = await get_next_train_status()
+        await update.message.reply_text(message)
+    except Exception as e:
+        await update.message.reply_text(f"⚠️ Fehler bei der Zugabfrage:\n{e}")
+        
 async def post_init(application):
     await asyncio.sleep(1)
     bot = application.bot
