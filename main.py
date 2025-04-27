@@ -155,61 +155,69 @@ import requests
 from bs4 import BeautifulSoup
 import datetime
 
-def get_next_trains():
+async def zug(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        url = "https://fahrplan.oebb.at/bin/stboard.exe/dn?input=Hallein&boardType=dep&start=yes"
+        now = datetime.datetime.now(pytz.timezone("Europe/Vienna"))
+        time_str = now.strftime("%H:%M")
+        date_str = now.strftime("%d.%m.%Y")
+
+        url = "https://fahrplan.oebb.at/bin/stboard.exe/dn"
+        params = {
+            "input": "Hallein",
+            "boardType": "dep",
+            "time": time_str,
+            "date": date_str,
+            "maxJourneys": "8",
+            "productsFilter": "1111111111111111",
+            "start": "yes"
+        }
         headers = {
             "User-Agent": "Mozilla/5.0"
         }
-        response = requests.get(url, headers=headers)
+
+        response = requests.get(url, params=params, headers=headers)
         response.raise_for_status()
+        html = response.text
 
-        soup = BeautifulSoup(response.text, "html.parser")
+        # grobe Extraktion
+        entries = html.split('<tr class="journey">')[1:]
+        if not entries:
+            await update.message.reply_text("🚆 Keine Abfahrten gefunden.")
+            return
 
-        rows = soup.select("table.result tbody tr.journey")
-        trains = []
+        message = "🚆 **Nächste Abfahrten ab Hallein**\n\n"
+        count = 0
 
-        now = datetime.datetime.now()
-
-        for row in rows:
-            time_cell = row.find("td", class_="time")
-            station_cell = row.find("td", class_="station")
-            route_cell = row.find("td", class_="route")
-            train_cell = row.find("td", class_="train")  # Neu: Zug-/Busnummer
-
-            if not time_cell or not station_cell or not route_cell:
-                continue
-
-            dep_time_text = time_cell.get_text(strip=True)
-            destination = station_cell.get_text(strip=True)
-            via_text = route_cell.get_text(strip=True).lower()
-            line_text = train_cell.get_text(strip=True) if train_cell else "?"
-
+        for entry in entries:
             try:
-                dep_time = datetime.datetime.strptime(dep_time_text, "%H:%M").replace(
-                    year=now.year, month=now.month, day=now.day
+                time_part = entry.split('class="time">')[1].split('</td>')[0].strip()
+                line_part = entry.split('class="train">')[1].split('</td>')[0].strip()
+                direction_part = entry.split('class="direction">')[1].split('</td>')[0].strip()
+                try:
+                    platform_part = entry.split('class="platform">')[1].split('</td>')[0].strip()
+                except:
+                    platform_part = "?"
+
+                delay = ""
+                if "Verspätung" in entry:
+                    delay_text = entry.split('class="delay">')[1].split('</td>')[0].strip()
+                    delay = f" (+{delay_text})"
+
+                message += (
+                    f"**{time_part}** Uhr → {direction_part}\n"
+                    f"Linie: {line_part}, Gleis: {platform_part}{delay}\n\n"
                 )
+
+                count += 1
+                if count >= 8:
+                    break
             except Exception:
                 continue
 
-            delta = (dep_time - now).total_seconds() / 60
-
-            if 0 <= delta <= 45:
-                # Ziel oder Zwischenziel Salzburg
-                if "salzburg" in destination.lower() or "salzburg" in via_text:
-                    trains.append(
-                        f"**{dep_time.strftime('%H:%M')}** ➔ {destination} (Linie {line_text})"
-                    )
-
-        if not trains:
-            return "🚆 **Keine passenden Verbindungen Richtung Salzburg in den nächsten 45 Minuten gefunden.**"
-
-        result = "🚍 **Nächste Abfahrten Hallein → Salzburg:**\n\n"
-        result += "\n".join(trains)
-        return result
+        await update.message.reply_text(message, parse_mode="Markdown")
 
     except Exception as e:
-        return f"⚠️ Fehler beim Zug-/Bus-Update:\n{e}"
+        await update.message.reply_text(f"⚠️ Fehler bei der Zugabfrage:\n{e}")
 # ✅ /termin Befehl: Flexible Sprache + Bestätigung
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
