@@ -24,10 +24,11 @@ from telegram.ext import (
     filters
 )
 
-from pyhafas import HafasClient
-from pyhafas.profile import DBProfile
+from hafas_client import HafasClient
+from hafas_client.models import StationBoardRequest
+from hafas_client.profile import DBProfile
 
-hafas=HafasClient(DBProfile())
+client = HafasClient(DBProfile())
 
 # ✅ token.pkl erzeugen (falls nötig)
 if not os.path.exists("token.pkl"):
@@ -152,22 +153,25 @@ def generate_event_summary(date):
 
 async def get_next_train_status():
     now = datetime.datetime.now()
-    journeys = await hafas.departures(
-        station="8100059",  # Hallein (DB-HAFAS-ID)
+    departures = client.station_board(
+        station="Hallein",
         date=now,
-        max_trips=5
+        max_trips=5,  # Wieviele Verbindungen maximal abrufen
+        direction="Salzburg Hbf"
     )
 
-    results = []
-    for journey in journeys:
-        if "Salzburg Hbf" in journey.destination.name:
-            planned = journey.planned_departure.strftime("%H:%M")
-            delay_min = (journey.departure - journey.planned_departure).total_seconds() / 60
-            delay_text = f"{int(delay_min)} min Verspätung" if delay_min > 0 else "pünktlich"
-            results.append(f"🚆 {planned} → Salzburg: {delay_text}")
-    if not results:
-        results.append("❌ Keine passende Verbindung gefunden.")
-    return "\n".join(results)
+    message = "🚆 Nächste Züge Hallein → Salzburg:\n\n"
+    for dep in departures:
+        time_str = dep.departure.strftime("%H:%M")
+        delay = dep.delay if dep.delay else 0
+        platform = dep.platform or "?"
+        status = f"{time_str} auf Gleis {platform}"
+        if delay > 0:
+            status += f" (+{delay} min verspätet)"
+        message += f"- {status}\n"
+
+    return message
+
     
 # ✅ /termin Befehl: Flexible Sprache + Bestätigung
 
@@ -307,23 +311,26 @@ async def zug(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("🚆 Keine Verbindungen gefunden.")
             return
 
-        text = "🚆 **Nächste Verbindungen Hallein → Salzburg Hbf**\n"
+        # Überschrift
+        text = "🚆 *Nächste Verbindungen Hallein → Salzburg Hbf:*\n"
 
-        for conn in connections.connections[:2]:  # nur die nächsten 2 Verbindungen
-            dep = conn.departure
-            arr = conn.arrival
-            dep_time = dep.time.strftime("%H:%M") if dep else "?"
-            arr_time = arr.time.strftime("%H:%M") if arr else "?"
-            platform = dep.platform if dep and dep.platform else "?"
-            delay = dep.delay if dep and dep.delay else 0
+        # Verbindungen auflisten
+        for conn in connections.connections[:2]:  # nur die nächsten 2
+            if not conn.departure or not conn.arrival:
+                continue
 
-            delay_text = f"+{delay} Min." if delay else "pünktlich"
+            dep_time = conn.departure.time.strftime("%H:%M")
+            arr_time = conn.arrival.time.strftime("%H:%M")
+            platform = conn.departure.platform or "?"
+            delay = conn.departure.delay or 0
+
+            delay_text = f"+{delay} Min. verspätet" if delay > 0 else "pünktlich"
 
             text += (
-                f"\nAbfahrt: {dep_time} Uhr (Gleis {platform})\n"
-                f"Ankunft: {arr_time} Uhr\n"
-                f"Status: {delay_text}\n"
-                "-------------------------\n"
+                f"\n*Abfahrt:* {dep_time} Uhr (Gleis {platform})\n"
+                f"*Ankunft:* {arr_time} Uhr\n"
+                f"*Status:* {delay_text}\n"
+                f"——————————————\n"
             )
 
         await update.message.reply_text(text, parse_mode="Markdown")
