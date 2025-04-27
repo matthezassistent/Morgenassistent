@@ -324,13 +324,6 @@ async def send_evening_summary(bot: Bot):
     for chunk in chunks:
         await bot.send_message(chat_id=CHAT_ID, text=chunk[:4000])
 
-async def zug(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    try:
-        message = await get_next_train_status()
-        await update.message.reply_text(f"🚆 Aktueller Zugstatus:\n\n{message}")
-    except Exception as e:
-        await update.message.reply_text(f"⚠️ Fehler bei der Zugabfrage:\n{e}")
-
 async def send_morning_train_update(bot: Bot):
     message = get_next_trains()
     await bot.send_message(chat_id=CHAT_ID, text=message, parse_mode="Markdown")
