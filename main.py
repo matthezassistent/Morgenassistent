@@ -24,11 +24,6 @@ from telegram.ext import (
     filters
 )
 
-from hafas_client import HafasClient
-from hafas_client.models import StationBoardRequest
-from hafas_client.profile import DBProfile
-
-client = HafasClient(DBProfile())
 
 # ✅ token.pkl erzeugen (falls nötig)
 if not os.path.exists("token.pkl"):
@@ -45,7 +40,6 @@ CHAT_ID = 8011259706
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 TODOIST_API_TOKEN = os.getenv("TODOIST_API_TOKEN")
 
-hafas_client = HafasClient(DBProfile())
 
 # ✅ ChatGPT-Briefing generieren
 
@@ -149,28 +143,45 @@ def generate_event_summary(date):
         summary.append("📝 Aufgaben:\n" + todo)
     return summary
 
-# ✅ Zugstatus Scotty (DB)
+# IDs der Bahnhöfe: Hallein und Salzburg Hbf
+HALLEIN_ID = "8100136"
+SALZBURG_ID = "8100013"
 
-async def get_next_train_status():
-    now = datetime.datetime.now()
-    departures = client.station_board(
-        station="Hallein",
-        date=now,
-        max_trips=5,  # Wieviele Verbindungen maximal abrufen
-        direction="Salzburg Hbf"
-    )
+def get_next_trains():
+    try:
+        now = datetime.datetime.now()
+        response = requests.get(
+            f"https://v5.transport.rest/journeys?from={HALLEIN_ID}&to={SALZBURG_ID}&results=3&departure={now.isoformat()}",
+            timeout=10
+        )
+        response.raise_for_status()
+        data = response.json()
 
-    message = "🚆 Nächste Züge Hallein → Salzburg:\n\n"
-    for dep in departures:
-        time_str = dep.departure.strftime("%H:%M")
-        delay = dep.delay if dep.delay else 0
-        platform = dep.platform or "?"
-        status = f"{time_str} auf Gleis {platform}"
-        if delay > 0:
-            status += f" (+{delay} min verspätet)"
-        message += f"- {status}\n"
+        if not data.get("journeys"):
+            return "🚆 Keine Verbindungen gefunden."
 
-    return message
+        message = "🚆 **Nächste Verbindungen Hallein → Salzburg Hbf**\n"
+        for journey in data["journeys"][:2]:  # nur die ersten 2
+            dep = journey["legs"][0]["departure"]
+            arr = journey["legs"][0]["arrival"]
+            planned_dep = datetime.datetime.fromisoformat(dep["planned"]).strftime("%H:%M")
+            planned_arr = datetime.datetime.fromisoformat(arr["planned"]).strftime("%H:%M")
+            platform = dep.get("platform", "?")
+            delay = dep.get("delay", 0)
+
+            delay_text = f"+{delay} Min." if delay else "pünktlich"
+
+            message += (
+                f"\nAbfahrt: {planned_dep} (Gleis {platform})\n"
+                f"Ankunft: {planned_arr}\n"
+                f"Status: {delay_text}\n"
+                "------------------------\n"
+            )
+
+        return message
+
+    except Exception as e:
+        return f"⚠️ Fehler bei der Zugabfrage:\n{e}"
 
     
 # ✅ /termin Befehl: Flexible Sprache + Bestätigung
@@ -298,46 +309,8 @@ async def frage(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(chunk[:4000])
 
 async def zug(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    try:
-        now = datetime.datetime.now(pytz.timezone("Europe/Vienna"))
-        connections = hafas.connections(
-            origin="Hallein",
-            destination="Salzburg Hbf",
-            date=now,
-            max_changes=0
-        )
-
-        if not connections or not connections.connections:
-            await update.message.reply_text("🚆 Keine Verbindungen gefunden.")
-            return
-
-        # Überschrift
-        text = "🚆 *Nächste Verbindungen Hallein → Salzburg Hbf:*\n"
-
-        # Verbindungen auflisten
-        for conn in connections.connections[:2]:  # nur die nächsten 2
-            if not conn.departure or not conn.arrival:
-                continue
-
-            dep_time = conn.departure.time.strftime("%H:%M")
-            arr_time = conn.arrival.time.strftime("%H:%M")
-            platform = conn.departure.platform or "?"
-            delay = conn.departure.delay or 0
-
-            delay_text = f"+{delay} Min. verspätet" if delay > 0 else "pünktlich"
-
-            text += (
-                f"\n*Abfahrt:* {dep_time} Uhr (Gleis {platform})\n"
-                f"*Ankunft:* {arr_time} Uhr\n"
-                f"*Status:* {delay_text}\n"
-                f"——————————————\n"
-            )
-
-        await update.message.reply_text(text, parse_mode="Markdown")
-        
-    except Exception as e:
-        await update.message.reply_text(f"⚠️ Fehler bei der Zugabfrage:\n{e}")
-# ✅ Automatische Scheduler Aufgaben
+    message = get_next_trains()
+    await update.message.reply_text(message, parse_mode="Markdown")# ✅ Automatische Scheduler Aufgaben
 
 async def send_daily_summary(bot: Bot):
     today = datetime.datetime.utcnow().astimezone(pytz.timezone("Europe/Berlin"))
@@ -359,12 +332,9 @@ async def zug(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"⚠️ Fehler bei der Zugabfrage:\n{e}")
 
 async def send_morning_train_update(bot: Bot):
-    try:
-        message = await get_next_train_status()
-        await bot.send_message(chat_id=CHAT_ID, text=f"🚆 Morgen-Update:\n\n{message}")
-    except Exception as e:
-        await bot.send_message(chat_id=CHAT_ID, text=f"⚠️ Fehler beim Morgen-Update:\n{e}")
-        
+    message = get_next_trains()
+    await bot.send_message(chat_id=CHAT_ID, text=message, parse_mode="Markdown")
+    
 async def post_init(application):
     await asyncio.sleep(1)
     bot = application.bot
