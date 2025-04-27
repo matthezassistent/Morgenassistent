@@ -312,7 +312,7 @@ async def send_evening_summary(bot: Bot):
 async def zug(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         message = await get_next_train_status()
-        await update.message.reply_text(message)
+        await update.message.reply_text(f"🚆 Aktueller Zugstatus:\n\n{message}")
     except Exception as e:
         await update.message.reply_text(f"⚠️ Fehler bei der Zugabfrage:\n{e}")
         
