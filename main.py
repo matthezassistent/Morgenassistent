@@ -147,9 +147,13 @@ def generate_event_summary(date):
         summary.append("📝 Aufgaben:\n" + todo)
     return summary
     
+import requests
+from bs4 import BeautifulSoup
+import datetime
+
 def get_next_trains():
     try:
-        url = "https://fahrplan.oebb.at/bin/stboard.exe/dn?input=Hallein&boardType=dep&time=now&maxJourneys=20"
+        url = "https://fahrplan.oebb.at/bin/stboard.exe/dn?input=Hallein&boardType=dep&start=yes"
         headers = {
             "User-Agent": "Mozilla/5.0"
         }
@@ -158,38 +162,46 @@ def get_next_trains():
 
         soup = BeautifulSoup(response.text, "html.parser")
 
-        # Alle Verbindungen auslesen
-        rows = soup.find_all("tr", class_="journey")
+        rows = soup.select("table.result tbody tr.journey")
         trains = []
 
         now = datetime.datetime.now()
 
         for row in rows:
-            dep_time_text = row.find("td", class_="time").text.strip()
-            destination = row.find("td", class_="station").text.strip()
+            time_cell = row.find("td", class_="time")
+            station_cell = row.find("td", class_="station")
+            route_cell = row.find("td", class_="route")
+
+            if not time_cell or not station_cell or not route_cell:
+                continue
+
+            dep_time_text = time_cell.get_text(strip=True)
+            destination = station_cell.get_text(strip=True)
+            via_text = route_cell.get_text(strip=True).lower()
 
             try:
                 dep_time = datetime.datetime.strptime(dep_time_text, "%H:%M").replace(
                     year=now.year, month=now.month, day=now.day
                 )
-            except:
+            except Exception:
                 continue
 
             delta = (dep_time - now).total_seconds() / 60
 
-            if 0 <= delta <= 30:  # Nur Abfahrten in den nächsten 30 Minuten
-                trains.append(f"**{dep_time.strftime('%H:%M')}** nach {destination}")
+            if 0 <= delta <= 45:
+                # Prüfen: fährt entweder direkt nach Salzburg oder via Salzburg
+                if "salzburg hbf" in destination.lower() or "salzburg" in via_text:
+                    trains.append(f"**{dep_time.strftime('%H:%M')}** ➔ {destination}")
 
         if not trains:
-            return "🚆 **Keine Züge in den nächsten 30 Minuten gefunden.**"
+            return "🚆 **Keine passenden Züge Richtung Salzburg in den nächsten 45 Minuten gefunden.**"
 
-        result = "🚆 **Nächste Verbindungen ab Hallein:**\n\n"
+        result = "🚆 **Nächste Verbindungen Hallein → Salzburg Hbf:**\n\n"
         result += "\n".join(trains)
         return result
 
     except Exception as e:
         return f"⚠️ Fehler beim Zug-Update:\n{e}"
-
 
 # ✅ /termin Befehl: Flexible Sprache + Bestätigung
 
