@@ -206,9 +206,7 @@ async def zug(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     except Exception as e:
         await update.message.reply_text(f"⚠️ Fehler bei der Zugabfrage:\n{e}")
-
-
-
+        
 # ✅ /termin Befehl: Flexible Sprache + Bestätigung
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
