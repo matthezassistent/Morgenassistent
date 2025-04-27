@@ -335,8 +335,8 @@ async def frage(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def zug(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        message = get_next_train_status()
-        await update.message.reply_text(message)
+        message = get_next_trains()
+        await update.message.reply_text(message, parse_mode="Markdown")
     except Exception as e:
         await update.message.reply_text(f"⚠️ Fehler bei der Zugabfrage:\n{e}")
         
