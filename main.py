@@ -145,50 +145,50 @@ def generate_event_summary(date):
         summary.append("📝 Aufgaben:\n" + todo)
     return summary
     
-import requests
-from bs4 import BeautifulSoup
-import datetime
 
-import requests
-from datetime import datetime
+async def get_departures_from_hallein(max_results=3):
+    now = datetime.now()
+    date = now.strftime("%Y-%m-%d")
+    time = now.strftime("%H:%M")
 
-def get_departures_from_hallein(max_results=8):
-    url = "https://fahrplan.oebb.at/bin/stboard.exe/dn"
-    params = {
-        "input": "Hallein",
-        "boardType": "dep",
-        "maxJourneys": max_results,
-        "outputFormat": "JSON",
-    }
+    url = (
+        f"https://fahrplan.oebb.at/bin/ajax-getstop.exe/dn?"
+        f"start=yes&REQTrain_name=&input=Hallein&boardType=dep"
+        f"&date={date}&time={time}&maxJourneys={max_results}"
+        f"&selectDate=today&productsFilter=1111111111&dirInput=Salzburg"
+    )
 
     try:
-        response = requests.get(url, params=params)
-        response.raise_for_status()
+        response = requests.get(url, timeout=10)
+
+        if response.status_code != 200:
+            return f"❌ Fehler: Serverantwort {response.status_code}"
+
+        if not response.text.strip():
+            return "❌ Fehler: Leere Antwort vom Server."
+
+        # Scotty schickt manchmal HTML statt JSON -> prüfen
+        if not response.headers.get("Content-Type", "").startswith("application/json"):
+            return "❌ Fehler: Ungültige Antwort vom Server (kein JSON)."
+
         data = response.json()
 
-        departures = data.get("departure", [])
+        departures = []
+        for item in data.get("departureList", [])[:max_results]:
+            time_str = item.get("time", "??:??")
+            direction = item.get("direction", "Unbekannt")
+            platform = item.get("platform", "??")
+            train = (item.get("trainType", "") + " " + item.get("trainNum", "")).strip()
+            departures.append(f"**{time_str}** – {train} nach {direction} (Gleis {platform})")
+
         if not departures:
-            return "Keine Abfahrten gefunden."
+            return "ℹ️ Keine Abfahrten gefunden."
 
-        message = "Nächste Abfahrten ab Hallein:\n"
-        for dep in departures:
-            time = dep["time"]
-            destination = dep["direction"]
-            train = dep.get("product", "Zug")
-            delay = dep.get("delay", 0)
-
-            dep_time = datetime.strptime(time, "%Y-%m-%dT%H:%M:%S").strftime("%H:%M")
-            delay_text = f" (+{delay} min)" if delay else ""
-
-            message += f"- {train} nach {destination}: {dep_time}{delay_text}\n"
-
-        return message
+        return "\n".join(departures)
 
     except Exception as e:
-        return f"Fehler bei der Abfahrtsabfrage: {e}"
-
-pending_events = {}  # Zwischenspeicher für Benutzeranfragen
-
+        return f"❌ Fehler bei der Abfahrtsabfrage: {str(e)}"
+        
 async def parse_event(text):
     try:
         # Einfache Heuristik: Erkennung von Zeit und Datum
@@ -325,8 +325,8 @@ async def send_morning_train_update(bot: Bot):
     await bot.send_message(chat_id=CHAT_ID, text=message, parse_mode="Markdown")
 
 async def handle_departures(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    info = get_departures_from_hallein(max_results=2)  # 2 Verbindungen ab Hallein
-    await update.message.reply_text(info)
+    info = await get_departures_from_hallein(max_results=2)
+    await update.message.reply_text(info, parse_mode="Markdown")
     
 async def post_init(application):
     await asyncio.sleep(1)
