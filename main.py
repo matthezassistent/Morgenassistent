@@ -146,49 +146,69 @@ def generate_event_summary(date):
     return summary
     
 
+import aiohttp
+import datetime
+
 async def get_departures_from_hallein(max_results=3):
-    now = datetime.now()
+    now = datetime.datetime.now()
     date = now.strftime("%Y-%m-%d")
     time = now.strftime("%H:%M")
 
-    url = (
-        f"https://fahrplan.oebb.at/bin/ajax-getstop.exe/dn?"
-        f"start=yes&REQTrain_name=&input=Hallein&boardType=dep"
-        f"&date={date}&time={time}&maxJourneys={max_results}"
-        f"&selectDate=today&productsFilter=1111111111&dirInput=Salzburg"
-    )
+    url = "https://scotty.oebb.at/bin/mgate.exe"
+
+    headers = {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+    }
+
+    payload = {
+        "svcReqL": [
+            {
+                "req": {
+                    "input": {"loc": {"name": "Hallein", "type": "S"}},
+                    "dirInput": {"loc": {"name": "Salzburg Hbf", "type": "S"}},
+                    "time": {"txt": time},
+                    "date": {"txt": date},
+                    "maxJourneys": max_results,
+                    "getPasslist": False,
+                    "outFrKey": "DEP"
+                },
+                "meth": "TripSearch"
+            }
+        ],
+        "client": {
+            "id": "HAFAS",
+            "type": "WEB",
+            "name": "oebb"
+        },
+        "ver": "1.27"
+    }
 
     try:
-        response = requests.get(url, timeout=10)
+        async with aiohttp.ClientSession() as session:
+            async with session.post(url, json=payload, headers=headers, timeout=10) as response:
+                if response.status != 200:
+                    return f"❌ Fehler: Serverantwort {response.status}"
+                
+                data = await response.json()
 
-        if response.status_code != 200:
-            return f"❌ Fehler: Serverantwort {response.status_code}"
+                departures = []
+                journeys = data.get("svcResL", [{}])[0].get("res", {}).get("outConL", [])
+                for journey in journeys[:max_results]:
+                    departure_time = journey.get("dep", {}).get("dTimeS", "??:??")[11:16]
+                    train_name = journey.get("prodL", [{}])[0].get("name", "Zug")
+                    destination = journey.get("dirTxt", "Unbekannt")
+                    platform = journey.get("dep", {}).get("dPlatfS", "??")
 
-        if not response.text.strip():
-            return "❌ Fehler: Leere Antwort vom Server."
+                    departures.append(f"**{departure_time}** – {train_name} nach {destination} (Gleis {platform})")
 
-        # Scotty schickt manchmal HTML statt JSON -> prüfen
-        if not response.headers.get("Content-Type", "").startswith("application/json"):
-            return "❌ Fehler: Ungültige Antwort vom Server (kein JSON)."
+                if not departures:
+                    return "ℹ️ Keine Abfahrten gefunden."
 
-        data = response.json()
-
-        departures = []
-        for item in data.get("departureList", [])[:max_results]:
-            time_str = item.get("time", "??:??")
-            direction = item.get("direction", "Unbekannt")
-            platform = item.get("platform", "??")
-            train = (item.get("trainType", "") + " " + item.get("trainNum", "")).strip()
-            departures.append(f"**{time_str}** – {train} nach {direction} (Gleis {platform})")
-
-        if not departures:
-            return "ℹ️ Keine Abfahrten gefunden."
-
-        return "\n".join(departures)
+                return "\n".join(departures)
 
     except Exception as e:
-        return f"❌ Fehler bei der Abfahrtsabfrage: {str(e)}"
-        
+        return f"❌ Fehler bei der Abfahrtsabfrage: {str(e)}"        
 async def parse_event(text):
     try:
         # Einfache Heuristik: Erkennung von Zeit und Datum
