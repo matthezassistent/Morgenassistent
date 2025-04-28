@@ -25,7 +25,6 @@ from telegram.ext import (
 import requests
 from datetime import datetime
 import time
-import aiohttp
 
 
 # ✅ token.pkl erzeugen (falls nötig)
@@ -145,71 +144,7 @@ def generate_event_summary(date):
     if todo:
         summary.append("📝 Aufgaben:\n" + todo)
     return summary
-    
-
-import aiohttp
-import datetime
-
-async def get_departures_from_hallein(max_results=3):
-    now = datetime.datetime.now()
-    date = now.strftime("%Y-%m-%d")
-    time = now.strftime("%H:%M")
-
-    url = "https://scotty.oebb.at/bin/mgate.exe"
-
-    headers = {
-        "Content-Type": "application/json",
-        "Accept": "application/json",
-    }
-
-    payload = {
-        "svcReqL": [
-            {
-                "req": {
-                    "input": {"loc": {"name": "Hallein", "type": "S"}},
-                    "dirInput": {"loc": {"name": "Salzburg Hbf", "type": "S"}},
-                    "time": {"txt": time},
-                    "date": {"txt": date},
-                    "maxJourneys": max_results,
-                    "getPasslist": False,
-                    "outFrKey": "DEP"
-                },
-                "meth": "TripSearch"
-            }
-        ],
-        "client": {
-            "id": "HAFAS",
-            "type": "WEB",
-            "name": "oebb"
-        },
-        "ver": "1.27"
-    }
-
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.post(url, json=payload, headers=headers, timeout=10) as response:
-                if response.status != 200:
-                    return f"❌ Fehler: Serverantwort {response.status}"
-                
-                data = await response.json()
-
-                departures = []
-                journeys = data.get("svcResL", [{}])[0].get("res", {}).get("outConL", [])
-                for journey in journeys[:max_results]:
-                    departure_time = journey.get("dep", {}).get("dTimeS", "??:??")[11:16]
-                    train_name = journey.get("prodL", [{}])[0].get("name", "Zug")
-                    destination = journey.get("dirTxt", "Unbekannt")
-                    platform = journey.get("dep", {}).get("dPlatfS", "??")
-
-                    departures.append(f"**{departure_time}** – {train_name} nach {destination} (Gleis {platform})")
-
-                if not departures:
-                    return "ℹ️ Keine Abfahrten gefunden."
-
-                return "\n".join(departures)
-
-    except Exception as e:
-        return f"❌ Fehler bei der Abfahrtsabfrage: {str(e)}"        
+   
 async def parse_event(text):
     try:
         # Einfache Heuristik: Erkennung von Zeit und Datum
@@ -355,8 +290,6 @@ async def post_init(application):
     scheduler = AsyncIOScheduler(timezone="Europe/Berlin")
     scheduler.add_job(send_daily_summary, 'cron', hour=6, minute=20, args=[bot])
     scheduler.add_job(send_evening_summary, 'cron', hour=21, minute=0, args=[bot])
-    scheduler.add_job(send_morning_train_update, 'cron', hour=6, minute=30, args=[bot])
-    scheduler.add_job(send_morning_train_update, 'cron', hour=6, minute=40, args=[bot])
     scheduler.start()
     print("🕒 Scheduler gestartet")
 
@@ -366,7 +299,6 @@ def main():
     print("👀 Bot gestartet.")
     app = ApplicationBuilder().token(BOT_TOKEN).post_init(post_init).build()
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("zug", handle_departures))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, frage))
     app.run_polling()
     app.add_handler(CommandHandler("termin", termin))
