@@ -324,9 +324,9 @@ async def send_morning_train_update(bot: Bot):
     message = await get_next_departures_text()
     await bot.send_message(chat_id=CHAT_ID, text=message, parse_mode="Markdown")
 
-def handle_departures(message):
-    info = get_departures_from_hallein(max_results=2)  # z.B. nur 2 Verbindungen
-    bot.send_message(message.chat.id, info)
+async def handle_departures(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    info = get_departures_from_hallein(max_results=2)  # 2 Verbindungen ab Hallein
+    await update.message.reply_text(info)
     
 async def post_init(application):
     await asyncio.sleep(1)
