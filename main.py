@@ -23,7 +23,6 @@ from telegram.ext import (
     filters
 )
 import requests
-from bs4 import BeautifulSoup
 import datetime
 import time
 
@@ -153,7 +152,7 @@ import datetime
 import requests
 from datetime import datetime
 
-def get_departures_from_hallein(max_results=5):
+def get_departures_from_hallein(max_results=8):
     url = "https://fahrplan.oebb.at/bin/stboard.exe/dn"
     params = {
         "input": "Hallein",
@@ -324,6 +323,10 @@ async def send_evening_summary(bot: Bot):
 async def send_morning_train_update(bot: Bot):
     message = await get_next_departures_text()
     await bot.send_message(chat_id=CHAT_ID, text=message, parse_mode="Markdown")
+
+def handle_departures(message):
+    info = get_departures_from_hallein(max_results=2)  # z.B. nur 2 Verbindungen
+    bot.send_message(message.chat.id, info)
     
 async def post_init(application):
     await asyncio.sleep(1)
@@ -342,7 +345,7 @@ def main():
     print("👀 Bot gestartet.")
     app = ApplicationBuilder().token(BOT_TOKEN).post_init(post_init).build()
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("zug", zug))
+    app.add_handler(CommandHandler("zug", handle_departures))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, frage))
     app.run_polling()
     app.add_handler(CommandHandler("termin", termin))
