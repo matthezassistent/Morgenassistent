@@ -23,7 +23,6 @@ from telegram.ext import (
     filters
 )
 import requests
-from datetime import datetime
 import time
 
 
@@ -289,6 +288,7 @@ async def post_init(application):
     bot = application.bot
     scheduler = AsyncIOScheduler(timezone="Europe/Berlin")
     scheduler.add_job(send_daily_summary, 'cron', hour=6, minute=20, args=[bot])
+    scheduler.add_job(send_daily_summary, 'cron', hour=7, minute=50, args=[bot])
     scheduler.add_job(send_evening_summary, 'cron', hour=21, minute=0, args=[bot])
     scheduler.start()
     print("🕒 Scheduler gestartet")
