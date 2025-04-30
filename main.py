@@ -31,7 +31,7 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 CHAT_ID = 8011259706
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 TODOIST_API_TOKEN = os.getenv("TODOIST_API_TOKEN")
-WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET", "geheim123")
+WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET", "16mAtT24")
 PORT = int(os.environ.get("PORT", 8443))
 
 # TOKEN.PKL erzeugen (Render-kompatibel)
@@ -342,13 +342,11 @@ def main():
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, frage))
     app.add_handler(CallbackQueryHandler(button_handler))
     app.run_webhook(
-        listen="0.0.0.0",
-        port=PORT,
-        webhook_path=f"/{WEBHOOK_SECRET}",
-        webhook_url=f"https://{os.environ['RENDER_EXTERNAL_HOSTNAME']}/{WEBHOOK_SECRET}",
-        fastapi_app=app_fastapi
-    )
-
+    listen="0.0.0.0",
+    port=PORT,
+    webhook_url=f"https://{os.environ['RENDER_EXTERNAL_HOSTNAME']}/{WEBHOOK_SECRET}",
+    fastapi_app=app_fastapi
+)
 def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return update.message.reply_text("👋 Hallo! Ich bin dein Assistent.")
 
