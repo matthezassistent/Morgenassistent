@@ -11,8 +11,6 @@ from datetime import datetime, timedelta, date, time
 from dateutil import parser
 from dateparser.search import search_dates
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from fastapi import FastAPI, Request
-
 from googleapiclient.discovery import build
 from google.oauth2.credentials import Credentials
 from telegram import Update, Bot, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup
@@ -320,35 +318,28 @@ async def frage(update: Update, context: ContextTypes.DEFAULT_TYPE):
     for chunk in chunks:
         await update.message.reply_text(chunk[:4000])
 
-# FastAPI-Server für Webhook
-app_fastapi = FastAPI()
-
-@app_fastapi.post(f"/{WEBHOOK_SECRET}")
-async def telegram_webhook(request: Request):
-    data = await request.json()
-    await app.update_queue.put(data)
-    return {"ok": True}
-
 # Start
 
 def main():
     print("🚀 Starte Telegram Webhook-Bot...")
     global app
     app = ApplicationBuilder().token(BOT_TOKEN).build()
+
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("planung", planung))
     app.add_handler(CommandHandler("termin", termin))
     app.add_handler(MessageHandler(filters.TEXT & filters.Regex("^(Ja|Nein|ja|nein)$"), handle_yes_no))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, frage))
     app.add_handler(CallbackQueryHandler(button_handler))
+
     app.run_webhook(
-    listen="0.0.0.0",
-    port=PORT,
-    webhook_url=f"https://{os.environ['RENDER_EXTERNAL_HOSTNAME']}/{WEBHOOK_SECRET}",
-    fastapi_app=app_fastapi
-)
+        listen="0.0.0.0",
+        port=PORT,
+        webhook_url=f"https://{os.environ['RENDER_EXTERNAL_HOSTNAME']}/{WEBHOOK_SECRET}"
+    )
+   
 def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    return update.message.reply_text("👋 Hallo! Ich bin dein Assistent.")
+return update.message.reply_text("👋 Hallo! Ich bin dein Assistent.")
 
 if __name__ == '__main__':
     main()
