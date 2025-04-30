@@ -1,52 +1,80 @@
 import os
 import base64
-import datetime
 import pickle
-import dateparser
+import re
+import datetime
 import pytz
-import openai
 import requests
 import asyncio
-import re
+import openai
 from datetime import datetime, timedelta, date, time
-from googleapiclient.discovery import build
 from dateutil import parser
 from dateparser.search import search_dates
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from fastapi import FastAPI, Request
 
 from googleapiclient.discovery import build
 from google.oauth2.credentials import Credentials
-from googleapiclient.errors import HttpError
-from telegram import Update, Bot
+from telegram import Update, Bot, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
     ContextTypes,
     MessageHandler,
-    filters
+    CallbackQueryHandler,
+    filters,
+    Application
 )
-from telegram import ReplyKeyboardMarkup
-import requests
-import time
 
+# ENV-VARIABLEN
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+CHAT_ID = 8011259706
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+TODOIST_API_TOKEN = os.getenv("TODOIST_API_TOKEN")
+WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET", "geheim123")
+PORT = int(os.environ.get("PORT", 8443))
 
-# ✅ token.pkl erzeugen (falls nötig)
+# TOKEN.PKL erzeugen (Render-kompatibel)
 if not os.path.exists("token.pkl"):
     encoded_token = os.getenv("TOKEN_PKL_BASE64")
     if encoded_token:
         with open("token.pkl", "wb") as f:
             f.write(base64.b64decode(encoded_token))
         print("✅ token.pkl aus Umgebungsvariable erzeugt.")
-    else:
-        print("⚠️ Keine TOKEN_PKL_BASE64-Variable gefunden.")
 
-BOT_TOKEN = os.getenv("BOT_TOKEN")
-CHAT_ID = 8011259706
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-TODOIST_API_TOKEN = os.getenv("TODOIST_API_TOKEN")
+# Google Calendar
 
+def load_credentials():
+    with open("token.pkl", "rb") as token_file:
+        creds = pickle.load(token_file)
+    return creds
 
-# ✅ ChatGPT-Briefing generieren
+def list_all_calendars():
+    creds = load_credentials()
+    service = build('calendar', 'v3', credentials=creds)
+    calendars = service.calendarList().list().execute().get('items', [])
+    return [(cal['summary'], cal['id']) for cal in calendars]
+
+def get_events_for_date(target_date):
+    creds = load_credentials()
+    service = build('calendar', 'v3', credentials=creds)
+    start = target_date.replace(hour=0, minute=0, second=0).isoformat() + 'Z'
+    end = target_date.replace(hour=23, minute=59, second=59).isoformat() + 'Z'
+    events_all = []
+    calendars = list_all_calendars()
+    for name, cal_id in calendars:
+        events = service.events().list(
+            calendarId=cal_id,
+            timeMin=start,
+            timeMax=end,
+            singleEvents=True,
+            orderBy='startTime'
+        ).execute().get('items', [])
+        if events:
+            events_all.append((name, events))
+    return events_all
+
+# GPT Briefing
 
 def generate_chatgpt_briefing(summary):
     if not OPENAI_API_KEY:
@@ -66,48 +94,7 @@ def generate_chatgpt_briefing(summary):
     except:
         return None
 
-# ✅ Google Calendar Funktionen
-
-def load_credentials():
-    with open("token.pkl", "rb") as token_file:
-        creds = pickle.load(token_file)
-    return creds
-
-def list_all_calendars():
-    creds = load_credentials()
-    service = build('calendar', 'v3', credentials=creds)
-    calendars = service.calendarList().list().execute().get('items', [])
-    return [(cal['summary'], cal['id']) for cal in calendars]
-
-def get_events_for_date(target_date):
-    creds = load_credentials()
-    service = build('calendar', 'v3', credentials=creds)
-    start = target_date.replace(hour=0, minute=0, second=0).isoformat() + 'Z'
-    end = target_date.replace(hour=23, minute=59, second=59).isoformat() + 'Z'
-
-    events_all = []
-    calendars = list_all_calendars()
-    for name, cal_id in calendars:
-        page_token = None
-        events = []
-        while True:
-            result = service.events().list(
-                calendarId=cal_id,
-                timeMin=start,
-                timeMax=end,
-                singleEvents=True,
-                orderBy='startTime',
-                pageToken=page_token
-            ).execute()
-            events.extend(result.get('items', []))
-            page_token = result.get('nextPageToken')
-            if not page_token:
-                break
-        if events:
-            events_all.append((name, events))
-    return events_all
-
-# ✅ Todoist Aufgaben
+# Todoist
 
 def get_todoist_tasks():
     try:
@@ -123,10 +110,6 @@ def get_todoist_tasks():
     except:
         return "❌ Fehler beim Aufgabenlisten."
 
-def parse_task_duration(task_content):
-    match = re.search(r"#(\d+)min", task_content)
-    return int(match.group(1)) if match else 30  # Standard: 30min
-
 def get_todoist_tasks_with_duration():
     headers = {"Authorization": f"Bearer {TODOIST_API_TOKEN}"}
     params = {"filter": "today | overdue"}
@@ -136,15 +119,96 @@ def get_todoist_tasks_with_duration():
     tasks = r.json()
     return [{'content': t['content'], 'duration': parse_task_duration(t['content'])} for t in tasks]
 
+def parse_task_duration(task_content):
+    match = re.search(r"#(\d+)min", task_content)
+    return int(match.group(1)) if match else 30
+
+# Termin-Parser (/termin)
+
+pending_events = {}
+
+async def parse_event(text):
+    try:
+        found_dates = search_dates(text, languages=['de'])
+        if not found_dates:
+            return None
+        start_dt = found_dates[0][1]
+        if "-" in text:
+            times = text.split("-")
+            if len(times) >= 2:
+                try:
+                    start_time = parser.parse(times[0], fuzzy=True)
+                    end_time = parser.parse(times[1], fuzzy=True)
+                    start_dt = start_dt.replace(hour=start_time.hour, minute=start_time.minute)
+                    end_dt = start_dt.replace(hour=end_time.hour, minute=end_time.minute)
+                except:
+                    end_dt = start_dt + timedelta(hours=1)
+            else:
+                end_dt = start_dt + timedelta(hours=1)
+        else:
+            end_dt = start_dt + timedelta(hours=1)
+        ort = None
+        if " in " in text:
+            ort = text.split(" in ")[-1]
+        elif " bei " in text:
+            ort = text.split(" bei ")[-1]
+        title = text.split(" findet")[0] if " findet" in text else text.split(" am")[0]
+        return {
+            "title": title.strip(),
+            "start": start_dt,
+            "end": end_dt,
+            "location": ort.strip() if ort else None
+        }
+    except:
+        return None
+
+async def termin(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    text = update.message.text.replace("/termin", "").strip()
+    parsed = await parse_event(text)
+    if not parsed:
+        await update.message.reply_text("❌ Konnte den Termin nicht verstehen.")
+        return
+    pending_events[user_id] = parsed
+    message = f"📅 **Geplanter Termin:**\n\nTitel: {parsed['title']}\nStart: {parsed['start'].strftime('%d.%m.%Y %H:%M')}\nEnde: {parsed['end'].strftime('%d.%m.%Y %H:%M')}"
+    if parsed.get("location"):
+        message += f"\nOrt: {parsed['location']}"
+    buttons = [[InlineKeyboardButton("✅ Ja, eintragen", callback_data="confirm"), InlineKeyboardButton("❌ Nein", callback_data="cancel")]]
+    reply_markup = InlineKeyboardMarkup(buttons)
+    await update.message.reply_text(message, reply_markup=reply_markup, parse_mode="Markdown")
+
+async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    user_id = query.from_user.id
+    if query.data == "confirm" and user_id in pending_events:
+        parsed = pending_events.pop(user_id)
+        try:
+            creds = load_credentials()
+            service = build('calendar', 'v3', credentials=creds)
+            event = {
+                'summary': parsed['title'],
+                'start': {'dateTime': parsed['start'].isoformat(), 'timeZone': 'Europe/Berlin'},
+                'end': {'dateTime': parsed['end'].isoformat(), 'timeZone': 'Europe/Berlin'},
+            }
+            if parsed.get("location"):
+                event['location'] = parsed["location"]
+            service.events().insert(calendarId='primary', body=event).execute()
+            await query.edit_message_text("✅ Termin wurde eingetragen!")
+        except Exception as e:
+            await query.edit_message_text("❌ Fehler beim Eintragen.")
+    else:
+        if user_id in pending_events:
+            pending_events.pop(user_id)
+        await query.edit_message_text("❌ Termin wurde verworfen.")
+
+# Tagesplanung (/planung)
+
 def get_busy_times(creds, start_time, end_time):
     service = build("calendar", "v3", credentials=creds)
     calendar_ids = [cal[1] for cal in list_all_calendars()]
     items = [{"id": cal_id} for cal_id in calendar_ids]
-    body = {
-        "timeMin": start_time.isoformat() + "Z",
-        "timeMax": end_time.isoformat() + "Z",
-        "items": items,
-    }
+    body = {"timeMin": start_time.isoformat() + "Z", "timeMax": end_time.isoformat() + "Z", "items": items}
     events_result = service.freebusy().query(body=body).execute()
     busy_times = []
     for cal_id in calendar_ids:
@@ -181,7 +245,46 @@ def plan_tasks_in_blocks(tasks, free_blocks):
 
 def yes_no_keyboard():
     return ReplyKeyboardMarkup([["Ja", "Nein"]], one_time_keyboard=True, resize_keyboard=True)
-# ✅ Zusammenfassung erzeugen
+
+async def planung(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("🧠 Ich plane deinen Tag…")
+    creds = load_credentials()
+    now = datetime.utcnow()
+    end = now.replace(hour=18, minute=0)
+    tasks = get_todoist_tasks_with_duration()
+    busy = get_busy_times(creds, now, end)
+    free = find_free_blocks(busy, now, end)
+    plan, remaining = plan_tasks_in_blocks(tasks, free)
+    msg = "📋 Vorschlag für deine Aufgabenplanung:\n"
+    for item in plan:
+        msg += f"{item['start'].strftime('%H:%M')} – {item['end'].strftime('%H:%M')}: {item['task']}\n"
+    if remaining:
+        msg += "\n🕓 Diese Aufgaben würde ich auf morgen verschieben:\n"
+        for r in remaining:
+            msg += f"• {r['content']}\n"
+    msg += "\nSoll ich das so eintragen?"
+    await update.message.reply_text(msg, reply_markup=yes_no_keyboard())
+    context.user_data["geplanter_plan"] = plan
+
+async def handle_yes_no(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = update.message.text.strip().lower()
+    if text == "ja" and "geplanter_plan" in context.user_data:
+        plan = context.user_data.pop("geplanter_plan")
+        creds = load_credentials()
+        service = build("calendar", "v3", credentials=creds)
+        for item in plan:
+            event = {
+                'summary': item['task'],
+                'start': {'dateTime': item['start'].isoformat(), 'timeZone': 'Europe/Berlin'},
+                'end': {'dateTime': item['end'].isoformat(), 'timeZone': 'Europe/Berlin'}
+            }
+            service.events().insert(calendarId='primary', body=event).execute()
+        await update.message.reply_text("✅ Planung wurde eingetragen.")
+    elif text == "nein":
+        context.user_data.pop("geplanter_plan", None)
+        await update.message.reply_text("❌ Planung verworfen.")
+
+# Tageszusammenfassung
 
 def generate_event_summary(date):
     tz = pytz.timezone("Europe/Berlin")
@@ -205,113 +308,6 @@ def generate_event_summary(date):
     if todo:
         summary.append("📝 Aufgaben:\n" + todo)
     return summary
-   
-async def parse_event(text):
-    try:
-        # Einfache Heuristik: Erkennung von Zeit und Datum
-        found_dates = search_dates(text, languages=['de'])
-        if not found_dates:
-            return None
-
-        # Erste gefundene Zeit/Daten nehmen
-        start_dt = found_dates[0][1]
-
-        # Suche nach Zeitraum, falls angegeben (z.B. 16:00-18:00)
-        if "-" in text:
-            times = text.split("-")
-            if len(times) >= 2:
-                try:
-                    start_time = parser.parse(times[0], fuzzy=True)
-                    end_time = parser.parse(times[1], fuzzy=True)
-                    start_dt = start_dt.replace(hour=start_time.hour, minute=start_time.minute)
-                    end_dt = start_dt.replace(hour=end_time.hour, minute=end_time.minute)
-                except:
-                    end_dt = start_dt + datetime.timedelta(hours=1)
-            else:
-                end_dt = start_dt + datetime.timedelta(hours=1)
-        else:
-            end_dt = start_dt + datetime.timedelta(hours=1)
-
-        # Ort erkennen (alles nach "in" oder "bei")
-        ort = None
-        if " in " in text:
-            ort = text.split(" in ")[-1]
-        elif " bei " in text:
-            ort = text.split(" bei ")[-1]
-
-        # Titel aus Text extrahieren (ganz grob)
-        title = text.split(" findet")[0] if " findet" in text else text.split(" am")[0]
-
-        return {
-            "title": title.strip(),
-            "start": start_dt,
-            "end": end_dt,
-            "location": ort.strip() if ort else None
-        }
-    except Exception as e:
-        print(f"⚠️ Fehler beim Parsen: {e}")
-        return None
-
-async def termin(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    text = update.message.text.replace("/termin", "").strip()
-
-    parsed = await parse_event(text)
-    if not parsed:
-        await update.message.reply_text("❌ Konnte den Termin nicht verstehen. Bitte genaue Angaben machen.")
-        return
-
-    # Speichern im pending_events
-    pending_events[user_id] = parsed
-
-    # Zusammenfassung
-    message = f"📅 **Geplanter Termin:**\n\nTitel: {parsed['title']}\nStart: {parsed['start'].strftime('%d.%m.%Y %H:%M')}\nEnde: {parsed['end'].strftime('%d.%m.%Y %H:%M')}"
-    if parsed.get("location"):
-        message += f"\nOrt: {parsed['location']}"
-
-    # Bestätigungs-Buttons
-    buttons = [
-        [InlineKeyboardButton("✅ Ja, eintragen", callback_data="confirm"),
-         InlineKeyboardButton("❌ Nein, abbrechen", callback_data="cancel")]
-    ]
-    reply_markup = InlineKeyboardMarkup(buttons)
-
-    await update.message.reply_text(message, reply_markup=reply_markup, parse_mode="Markdown")
-
-async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    user_id = query.from_user.id
-
-    if query.data == "confirm" and user_id in pending_events:
-        parsed = pending_events.pop(user_id)
-
-        try:
-            # Eintrag in Google Kalender
-            creds = load_credentials()
-            service = build('calendar', 'v3', credentials=creds)
-            event = {
-                'summary': parsed['title'],
-                'start': {'dateTime': parsed['start'].isoformat(), 'timeZone': 'Europe/Berlin'},
-                'end': {'dateTime': parsed['end'].isoformat(), 'timeZone': 'Europe/Berlin'},
-            }
-            if parsed.get("location"):
-                event['location'] = parsed["location"]
-
-            service.events().insert(calendarId='primary', body=event).execute()
-            await query.edit_message_text("✅ Termin wurde erfolgreich in deinen Kalender eingetragen!")
-        except Exception as e:
-            print(f"❌ Fehler beim Eintragen: {e}")
-            await query.edit_message_text("❌ Fehler beim Eintragen des Termins.")
-    else:
-        if user_id in pending_events:
-            pending_events.pop(user_id)
-        await query.edit_message_text("❌ Termin wurde verworfen.")
-
-# ✅ Telegramm Kommandos
-
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("👋 Hallo! Ich bin dein Assistent.")
 
 async def frage(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.strip().lower()
@@ -324,107 +320,37 @@ async def frage(update: Update, context: ContextTypes.DEFAULT_TYPE):
     for chunk in chunks:
         await update.message.reply_text(chunk[:4000])
 
-async def planung(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("🧠 Ich plane deinen Tag…")
-    creds = load_credentials()
-    now = datetime.utcnow()
-    end = now.replace(hour=18, minute=0)
-    tasks = get_todoist_tasks_with_duration()
-    busy = get_busy_times(creds, now, end)
-    free = find_free_blocks(busy, now, end)
-    plan, remaining = plan_tasks_in_blocks(tasks, free)
+# FastAPI-Server für Webhook
+app_fastapi = FastAPI()
 
-    if plan:
-        msg = "📋 Vorschlag für deine Aufgabenplanung:\n"
-        for item in plan:
-            msg += f"{item['start'].strftime('%H:%M')} – {item['end'].strftime('%H:%M')}: {item['task']}\n"
-    else:
-        msg = "❌ Keine Aufgaben konnten eingeplant werden.\n"
+@app_fastapi.post(f"/{WEBHOOK_SECRET}")
+async def telegram_webhook(request: Request):
+    data = await request.json()
+    await app.update_queue.put(data)
+    return {"ok": True}
 
-    if remaining:
-        msg += "\n🕓 Diese Aufgaben würde ich auf morgen verschieben:\n"
-        for r in remaining:
-            msg += f"• {r['content']}\n"
-
-    msg += "\nSoll ich das so eintragen?"
-    await update.message.reply_text(msg, reply_markup=yes_no_keyboard())
-
-    context.user_data["geplanter_plan"] = plan
-
-async def handle_yes_no(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = update.message.text.strip().lower()
-    if text == "ja" and "geplanter_plan" in context.user_data:
-        plan = context.user_data.pop("geplanter_plan")
-        creds = load_credentials()
-        service = build("calendar", "v3", credentials=creds)
-        successes = []
-        failures = []
-        for item in plan:
-            try:
-                event = {
-                    'summary': item['task'],
-                    'start': {'dateTime': item['start'].isoformat(), 'timeZone': 'Europe/Berlin'},
-                    'end': {'dateTime': item['end'].isoformat(), 'timeZone': 'Europe/Berlin'},
-                }
-                service.events().insert(calendarId='primary', body=event).execute()
-                successes.append(item['task'])
-            except Exception as e:
-                print(f"❌ Fehler bei {item['task']}: {e}")
-                failures.append(item['task'])
-
-        msg = "✅ Die folgenden Aufgaben wurden eingetragen:\n"
-        msg += "\n".join(f"• {s}" for s in successes)
-        if failures:
-            msg += "\n\n⚠️ Diese Aufgaben konnten nicht eingetragen werden:\n"
-            msg += "\n".join(f"• {f}" for f in failures)
-        await update.message.reply_text(msg)
-    elif text == "nein":
-        context.user_data.pop("geplanter_plan", None)
-        await update.message.reply_text("❌ Okay, Planung verworfen.")
-
-    
-async def send_daily_summary(bot: Bot):
-    today = datetime.datetime.utcnow().astimezone(pytz.timezone("Europe/Berlin"))
-    chunks = generate_event_summary(today)
-    for chunk in chunks:
-        await bot.send_message(chat_id=CHAT_ID, text=chunk[:4000])
-
-async def send_evening_summary(bot: Bot):
-    tomorrow = datetime.datetime.utcnow().astimezone(pytz.timezone("Europe/Berlin")) + datetime.timedelta(days=1)
-    chunks = generate_event_summary(tomorrow)
-    for chunk in chunks:
-        await bot.send_message(chat_id=CHAT_ID, text=chunk[:4000])
-
-async def send_morning_train_update(bot: Bot):
-    message = await get_next_departures_text()
-    await bot.send_message(chat_id=CHAT_ID, text=message, parse_mode="Markdown")
-
-async def handle_departures(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    info = await get_departures_from_hallein(max_results=2)
-    await update.message.reply_text(info, parse_mode="Markdown")
-    
-async def post_init(application):
-    await asyncio.sleep(1)
-    bot = application.bot
-    scheduler = AsyncIOScheduler(timezone="Europe/Berlin")
-    scheduler.add_job(send_daily_summary, 'cron', hour=6, minute=20, args=[bot])
-    scheduler.add_job(send_daily_summary, 'cron', hour=7, minute=50, args=[bot])
-    scheduler.add_job(send_evening_summary, 'cron', hour=21, minute=0, args=[bot])
-    scheduler.start()
-    print("🕒 Scheduler gestartet")
-
-# ✅ Main
+# Start
 
 def main():
-    print("👀 Bot gestartet.")
-    app = ApplicationBuilder().token(BOT_TOKEN).post_init(post_init).build()
+    print("🚀 Starte Telegram Webhook-Bot...")
+    global app
+    app = ApplicationBuilder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, frage))
-    app.run_polling()
-    app.add_handler(MessageHandler(filters.TEXT & filters.Regex("^(Ja|Nein|ja|nein)$"), handle_yes_no))
     app.add_handler(CommandHandler("planung", planung))
     app.add_handler(CommandHandler("termin", termin))
+    app.add_handler(MessageHandler(filters.TEXT & filters.Regex("^(Ja|Nein|ja|nein)$"), handle_yes_no))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, frage))
-    app.add_handler(telegram.ext.CallbackQueryHandler(button_handler))
+    app.add_handler(CallbackQueryHandler(button_handler))
+    app.run_webhook(
+        listen="0.0.0.0",
+        port=PORT,
+        webhook_path=f"/{WEBHOOK_SECRET}",
+        webhook_url=f"https://{os.environ['RENDER_EXTERNAL_HOSTNAME']}/{WEBHOOK_SECRET}",
+        fastapi_app=app_fastapi
+    )
+
+def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    return update.message.reply_text("👋 Hallo! Ich bin dein Assistent.")
+
 if __name__ == '__main__':
     main()
