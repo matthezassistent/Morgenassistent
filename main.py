@@ -7,6 +7,9 @@ import pytz
 import openai
 import requests
 import asyncio
+import re
+from datetime import datetime, timedelta, date, time
+from googleapiclient.discovery import build
 from dateutil import parser
 from dateparser.search import search_dates
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -22,6 +25,7 @@ from telegram.ext import (
     MessageHandler,
     filters
 )
+from telegram import ReplyKeyboardMarkup
 import requests
 import time
 
@@ -119,6 +123,64 @@ def get_todoist_tasks():
     except:
         return "❌ Fehler beim Aufgabenlisten."
 
+def parse_task_duration(task_content):
+    match = re.search(r"#(\d+)min", task_content)
+    return int(match.group(1)) if match else 30  # Standard: 30min
+
+def get_todoist_tasks_with_duration():
+    headers = {"Authorization": f"Bearer {TODOIST_API_TOKEN}"}
+    params = {"filter": "today | overdue"}
+    r = requests.get("https://api.todoist.com/rest/v2/tasks", headers=headers, params=params)
+    if r.status_code != 200:
+        return []
+    tasks = r.json()
+    return [{'content': t['content'], 'duration': parse_task_duration(t['content'])} for t in tasks]
+
+def get_busy_times(creds, start_time, end_time):
+    service = build("calendar", "v3", credentials=creds)
+    calendar_ids = [cal[1] for cal in list_all_calendars()]
+    items = [{"id": cal_id} for cal_id in calendar_ids]
+    body = {
+        "timeMin": start_time.isoformat() + "Z",
+        "timeMax": end_time.isoformat() + "Z",
+        "items": items,
+    }
+    events_result = service.freebusy().query(body=body).execute()
+    busy_times = []
+    for cal_id in calendar_ids:
+        busy_times += events_result["calendars"][cal_id]["busy"]
+    return sorted(busy_times, key=lambda x: x["start"])
+
+def find_free_blocks(busy_times, start_dt, end_dt):
+    free = []
+    current = start_dt
+    for busy in busy_times:
+        busy_start = datetime.fromisoformat(busy["start"].replace("Z", "+00:00"))
+        busy_end = datetime.fromisoformat(busy["end"].replace("Z", "+00:00"))
+        if current < busy_start:
+            free.append((current, busy_start))
+        current = max(current, busy_end)
+    if current < end_dt:
+        free.append((current, end_dt))
+    return free
+
+def plan_tasks_in_blocks(tasks, free_blocks):
+    plan = []
+    remaining = tasks.copy()
+    for start, end in free_blocks:
+        slot = start
+        while remaining and slot + timedelta(minutes=remaining[0]['duration']) <= end:
+            task = remaining.pop(0)
+            plan.append({
+                'task': task['content'],
+                'start': slot,
+                'end': slot + timedelta(minutes=task['duration'])
+            })
+            slot += timedelta(minutes=task['duration'])
+    return plan, remaining
+
+def yes_no_keyboard():
+    return ReplyKeyboardMarkup([["Ja", "Nein"]], one_time_keyboard=True, resize_keyboard=True)
 # ✅ Zusammenfassung erzeugen
 
 def generate_event_summary(date):
@@ -262,6 +324,64 @@ async def frage(update: Update, context: ContextTypes.DEFAULT_TYPE):
     for chunk in chunks:
         await update.message.reply_text(chunk[:4000])
 
+async def planung(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("🧠 Ich plane deinen Tag…")
+    creds = load_credentials()
+    now = datetime.utcnow()
+    end = now.replace(hour=18, minute=0)
+    tasks = get_todoist_tasks_with_duration()
+    busy = get_busy_times(creds, now, end)
+    free = find_free_blocks(busy, now, end)
+    plan, remaining = plan_tasks_in_blocks(tasks, free)
+
+    if plan:
+        msg = "📋 Vorschlag für deine Aufgabenplanung:\n"
+        for item in plan:
+            msg += f"{item['start'].strftime('%H:%M')} – {item['end'].strftime('%H:%M')}: {item['task']}\n"
+    else:
+        msg = "❌ Keine Aufgaben konnten eingeplant werden.\n"
+
+    if remaining:
+        msg += "\n🕓 Diese Aufgaben würde ich auf morgen verschieben:\n"
+        for r in remaining:
+            msg += f"• {r['content']}\n"
+
+    msg += "\nSoll ich das so eintragen?"
+    await update.message.reply_text(msg, reply_markup=yes_no_keyboard())
+
+    context.user_data["geplanter_plan"] = plan
+
+async def handle_yes_no(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = update.message.text.strip().lower()
+    if text == "ja" and "geplanter_plan" in context.user_data:
+        plan = context.user_data.pop("geplanter_plan")
+        creds = load_credentials()
+        service = build("calendar", "v3", credentials=creds)
+        successes = []
+        failures = []
+        for item in plan:
+            try:
+                event = {
+                    'summary': item['task'],
+                    'start': {'dateTime': item['start'].isoformat(), 'timeZone': 'Europe/Berlin'},
+                    'end': {'dateTime': item['end'].isoformat(), 'timeZone': 'Europe/Berlin'},
+                }
+                service.events().insert(calendarId='primary', body=event).execute()
+                successes.append(item['task'])
+            except Exception as e:
+                print(f"❌ Fehler bei {item['task']}: {e}")
+                failures.append(item['task'])
+
+        msg = "✅ Die folgenden Aufgaben wurden eingetragen:\n"
+        msg += "\n".join(f"• {s}" for s in successes)
+        if failures:
+            msg += "\n\n⚠️ Diese Aufgaben konnten nicht eingetragen werden:\n"
+            msg += "\n".join(f"• {f}" for f in failures)
+        await update.message.reply_text(msg)
+    elif text == "nein":
+        context.user_data.pop("geplanter_plan", None)
+        await update.message.reply_text("❌ Okay, Planung verworfen.")
+
     
 async def send_daily_summary(bot: Bot):
     today = datetime.datetime.utcnow().astimezone(pytz.timezone("Europe/Berlin"))
@@ -301,6 +421,8 @@ def main():
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, frage))
     app.run_polling()
+    app.add_handler(MessageHandler(filters.TEXT & filters.Regex("^(Ja|Nein|ja|nein)$"), handle_yes_no))
+    app.add_handler(CommandHandler("planung", planung))
     app.add_handler(CommandHandler("termin", termin))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, frage))
     app.add_handler(telegram.ext.CallbackQueryHandler(button_handler))
