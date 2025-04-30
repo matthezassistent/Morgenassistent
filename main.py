@@ -339,7 +339,7 @@ def main():
     )
    
 def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-return update.message.reply_text("👋 Hallo! Ich bin dein Assistent.")
+    return update.message.reply_text("👋 Hallo! Ich bin dein Assistent.")
 
 if __name__ == '__main__':
     main()
