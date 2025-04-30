@@ -10,3 +10,4 @@ requests
 openai
 beautifulsoup4
 aiohttp
+python-dateutil==2.9.0
