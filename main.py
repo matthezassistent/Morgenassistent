@@ -7,6 +7,7 @@ import pytz
 import requests
 import asyncio
 import openai
+import telegram
 from datetime import datetime, timedelta, date, time
 from dateutil import parser
 from dateparser.search import search_dates
