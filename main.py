@@ -14,6 +14,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from googleapiclient.discovery import build
 from google.oauth2.credentials import Credentials
 from telegram import Update, Bot, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup
+print("PTB-Version:", telegram.__version__)
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
