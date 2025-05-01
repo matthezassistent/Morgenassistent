@@ -45,12 +45,6 @@ CHAT_ID = 8011259706
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 TODOIST_API_TOKEN = os.getenv("TODOIST_API_TOKEN")
 PORT = int(os.environ.get("PORT", 8443))
-# Webhook-Konfiguration (nur sichere Variante)
-WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET")
-RENDER_URL = os.getenv("RENDER_URL")
-if not WEBHOOK_SECRET or not RENDER_URL:
-    raise RuntimeError("❌ WEBHOOK_SECRET oder RENDER_URL ist nicht gesetzt!")
-webhook_url = f"{RENDER_URL}/{WEBHOOK_SECRET}"
 
 # TOKEN.PKL erzeugen (Render-kompatibel)
 if not os.path.exists("token.pkl"):
@@ -381,11 +375,8 @@ async def post_init(application):
 # Start
 
 def main():
-    print("🚀 Starte Telegram Webhook-Bot...")
     global app
-    app = ApplicationBuilder().token(BOT_TOKEN).post_init(
-        lambda app: ensure_webhook(BOT_TOKEN, webhook_url)
-    ).build()
+    app = ApplicationBuilder().token(BOT_TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("planung", planung))
@@ -394,22 +385,9 @@ def main():
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, frage))
     app.add_handler(CallbackQueryHandler(button_handler))
 
-    app.run_webhook(
-        listen="0.0.0.0",
-        port=PORT,
-        webhook_url=f"{RENDER_URL}/{WEBHOOK_SECRET}"
-    )
+    app.run_polling()
 
-async def ensure_webhook(bot_token, webhook_url):
-    bot = Bot(bot_token)
-    current = await bot.get_webhook_info()
-    if current.url != webhook_url:
-        await bot.set_webhook(url=webhook_url)
-        print(f"✅ Webhook gesetzt: {webhook_url}")
-    else:
-        print("ℹ️ Webhook bereits korrekt gesetzt.")
-
-    
+   
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     print("-> /start empfangen")
     await update.message.reply_text("👋 Hallo! Ich bin dein Assistent.")
