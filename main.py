@@ -31,8 +31,13 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 CHAT_ID = 8011259706
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 TODOIST_API_TOKEN = os.getenv("TODOIST_API_TOKEN")
-WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET", "16mAtT24")
 PORT = int(os.environ.get("PORT", 8443))
+# Webhook-Konfiguration (nur sichere Variante)
+WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET")
+RENDER_URL = os.getenv("RENDER_URL")
+if not WEBHOOK_SECRET or not RENDER_URL:
+    raise RuntimeError("❌ WEBHOOK_SECRET oder RENDER_URL ist nicht gesetzt!")
+webhook_url = f"{RENDER_URL}/{WEBHOOK_SECRET}"
 
 # TOKEN.PKL erzeugen (Render-kompatibel)
 if not os.path.exists("token.pkl"):
@@ -333,11 +338,11 @@ def main():
     app.add_handler(MessageHandler(filters.TEXT & filters.Regex("^(Ja|Nein|ja|nein)$"), handle_yes_no))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, frage))
     app.add_handler(CallbackQueryHandler(button_handler))
-
     app.run_webhook(
         listen="0.0.0.0",
         port=PORT,
-        webhook_url=f"https://{os.environ['RENDER_EXTERNAL_HOSTNAME']}/{WEBHOOK_SECRET}"
+        webhook_url=webhook_url
+      
     )
    
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
