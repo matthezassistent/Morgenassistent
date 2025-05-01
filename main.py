@@ -340,8 +340,9 @@ def main():
         webhook_url=f"https://{os.environ['RENDER_EXTERNAL_HOSTNAME']}/{WEBHOOK_SECRET}"
     )
    
-def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    return update.message.reply_text("👋 Hallo! Ich bin dein Assistent.")
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    print("-> /start empfangen")
+    await update.message.reply_text("👋 Hallo! Ich bin dein Assistent.")
 
 if __name__ == '__main__':
     main()
