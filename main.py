@@ -338,7 +338,34 @@ async def frage(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chunks = generate_event_summary(date)
     for chunk in chunks:
         await update.message.reply_text(chunk[:4000])
+async def send_morning_summary(bot: Bot):
+    print("⏰ Sende Morgenzusammenfassung…")
+    today = datetime.utcnow().astimezone(pytz.timezone("Europe/Berlin"))
+    chunks = generate_event_summary(today)
+    for chunk in chunks:
+        await bot.send_message(chat_id=CHAT_ID, text=chunk[:4000])
 
+async def send_evening_summary(bot: Bot):
+    print("🌙 Sende Abendzusammenfassung…")
+    tomorrow = datetime.utcnow().astimezone(pytz.timezone("Europe/Berlin")) + timedelta(days=1)
+    chunks = generate_event_summary(tomorrow)
+    for chunk in chunks:
+        await bot.send_message(chat_id=CHAT_ID, text=chunk[:4000])
+
+async def post_init(application):
+    await asyncio.sleep(1)
+    bot = application.bot
+    scheduler = AsyncIOScheduler(timezone="Europe/Berlin")
+    
+    # 🕓 Morgenzusammenfassung
+    scheduler.add_job(send_morning_summary, 'cron', hour=6, minute=40, args=[bot])
+    scheduler.add_job(send_morning_summary, 'cron', hour=10, minute=0, args=[bot])
+    
+    # 🌙 Abendzusammenfassung
+    scheduler.add_job(send_evening_summary, 'cron', hour=21, minute=25, args=[bot])
+
+    scheduler.start()
+    print("✅ Scheduler gestartet.")
 # Start
 
 def main():
