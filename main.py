@@ -341,9 +341,7 @@ def main():
     app.run_webhook(
         listen="0.0.0.0",
         port=PORT,
-        webhook_path=f"/{WEBHOOK_SECRET}",
         webhook_url=f"{RENDER_URL}/{WEBHOOK_SECRET}"
-    
     )
    
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
