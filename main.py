@@ -10,6 +10,19 @@ import openai
 import telegram
 from datetime import datetime, timedelta, date, time
 from dateutil import parser
+def interpret_date_naturally(text: str) -> datetime | None:
+    text = text.lower()
+    now = datetime.now()
+
+    if "heute" in text:
+        return now
+    elif "übermorgen" in text:
+        return now + timedelta(days=2)
+    elif "morgen" in text:
+        return now + timedelta(days=1)
+
+    result = search_dates(text, languages=["de"])
+    return result[0][1] if result else None
 from dateparser.search import search_dates
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from googleapiclient.discovery import build
@@ -316,11 +329,12 @@ def generate_event_summary(date):
 
 async def frage(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.strip().lower()
-    results = search_dates(text, languages=["de"])
-    if not results:
+    date = interpret_date_naturally(text)
+
+    if not date:
         await update.message.reply_text("❌ Konnte kein Datum erkennen.")
         return
-    date = results[0][1]
+
     chunks = generate_event_summary(date)
     for chunk in chunks:
         await update.message.reply_text(chunk[:4000])
