@@ -267,12 +267,23 @@ def yes_no_keyboard():
 async def planung(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("🧠 Ich plane deinen Tag…")
     creds = load_credentials()
-    now = datetime.utcnow()
-    end = now.replace(hour=18, minute=0)
+
+    # Lokale Zeit holen (Berlin)
+    tz = pytz.timezone("Europe/Berlin")
+    now = datetime.now(tz)
+
+    # Tagesende festlegen (18:00 Uhr)
+    end = tz.localize(datetime(now.year, now.month, now.day, 18, 0))
+
+    # Wenn bereits nach 18:00 → auf nächsten Tag verschieben
+    if end <= now:
+        end += timedelta(days=1)
+
     tasks = get_todoist_tasks_with_duration()
     busy = get_busy_times(creds, now, end)
     free = find_free_blocks(busy, now, end)
     plan, remaining = plan_tasks_in_blocks(tasks, free)
+
     msg = "📋 Vorschlag für deine Aufgabenplanung:\n"
     for item in plan:
         msg += f"{item['start'].strftime('%H:%M')} – {item['end'].strftime('%H:%M')}: {item['task']}\n"
@@ -282,6 +293,7 @@ async def planung(update: Update, context: ContextTypes.DEFAULT_TYPE):
             msg += f"• {r['content']}\n"
     msg += "\nSoll ich das so eintragen?"
     await update.message.reply_text(msg, reply_markup=yes_no_keyboard())
+
     context.user_data["geplanter_plan"] = plan
 
 async def handle_yes_no(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -362,7 +374,7 @@ async def post_init(application):
     scheduler.add_job(send_morning_summary, 'cron', hour=10, minute=0, args=[bot])
     
     # 🌙 Abendzusammenfassung
-    scheduler.add_job(send_evening_summary, 'cron', hour=21, minute=25, args=[bot])
+    scheduler.add_job(send_evening_summary, 'cron', hour=21, minute=50, args=[bot])
 
     scheduler.start()
     print("✅ Scheduler gestartet.")
@@ -371,7 +383,9 @@ async def post_init(application):
 def main():
     print("🚀 Starte Telegram Webhook-Bot...")
     global app
-    app = ApplicationBuilder().token(BOT_TOKEN).build()
+    app = ApplicationBuilder().token(BOT_TOKEN).post_init(
+        lambda app: ensure_webhook(BOT_TOKEN, webhook_url)
+    ).build()
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("planung", planung))
@@ -379,14 +393,22 @@ def main():
     app.add_handler(MessageHandler(filters.TEXT & filters.Regex("^(Ja|Nein|ja|nein)$"), handle_yes_no))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, frage))
     app.add_handler(CallbackQueryHandler(button_handler))
+
     app.run_webhook(
         listen="0.0.0.0",
         port=PORT,
         webhook_url=f"{RENDER_URL}/{WEBHOOK_SECRET}"
     )
-async def set_webhook(bot_token, full_url):
-    bot = telegram.Bot(bot_token)
-    await bot.set_webhook(url=full_url)
+
+async def ensure_webhook(bot_token, webhook_url):
+    bot = Bot(bot_token)
+    current = await bot.get_webhook_info()
+    if current.url != webhook_url:
+        await bot.set_webhook(url=webhook_url)
+        print(f"✅ Webhook gesetzt: {webhook_url}")
+    else:
+        print("ℹ️ Webhook bereits korrekt gesetzt.")
+
     
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     print("-> /start empfangen")
