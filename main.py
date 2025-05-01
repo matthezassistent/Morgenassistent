@@ -357,7 +357,10 @@ def main():
         port=PORT,
         webhook_url=f"{RENDER_URL}/{WEBHOOK_SECRET}"
     )
-   
+async def set_webhook(bot_token, full_url):
+    bot = telegram.Bot(bot_token)
+    await bot.set_webhook(url=full_url)
+    
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     print("-> /start empfangen")
     await update.message.reply_text("👋 Hallo! Ich bin dein Assistent.")
