@@ -214,6 +214,89 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             pending_events.pop(user_id)
         await query.edit_message_text("❌ Termin wurde verworfen.")
 
+from telegram import InlineKeyboardMarkup, InlineKeyboardButton
+from telegram.ext import CallbackQueryHandler
+
+# Aufgabe-Zwischenspeicher
+pending_tasks = {}
+
+# /todo handler
+async def todo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    headers = {"Authorization": f"Bearer {TODOIST_API_TOKEN}"}
+    params = {"filter": "today | overdue"}
+    r = requests.get("https://api.todoist.com/rest/v2/tasks", headers=headers, params=params)
+    tasks = r.json()
+
+    if not tasks:
+        await update.message.reply_text("✅ Keine offenen Aufgaben.")
+        return
+
+    pending_tasks[update.effective_user.id] = {str(i): t for i, t in enumerate(tasks, start=1)}
+    for i, task in enumerate(tasks, start=1):
+        buttons = [
+            [
+                InlineKeyboardButton("✅ Einplanen", callback_data=f"plan_{i}"),
+                InlineKeyboardButton("⏭️ Verschieben", callback_data=f"verschiebe_{i}"),
+                InlineKeyboardButton("✔️ Erledigt", callback_data=f"done_{i}")
+            ]
+        ]
+        await update.message.reply_text(f"{i}. {task['content']}", reply_markup=InlineKeyboardMarkup(buttons))
+
+# Callback handler
+async def todo_button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    user_id = query.from_user.id
+
+    action, number = query.data.split("_")
+    task = pending_tasks.get(user_id, {}).get(number)
+    if not task:
+        await query.edit_message_text("⚠️ Aufgabe nicht gefunden.")
+        return
+
+    if action == "plan":
+        context.user_data["plan_task"] = task
+        await query.edit_message_text(f"Wann soll ich '{task['content']}' einplanen? (z.\u202fB. 14:00)")
+
+    elif action == "verschiebe":
+        task_id = task["id"]
+        new_due = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
+        requests.post(f"https://api.todoist.com/rest/v2/tasks/{task_id}",
+                      headers={"Authorization": f"Bearer {TODOIST_API_TOKEN}"},
+                      json={"due_date": new_due})
+        await query.edit_message_text("⏭️ Aufgabe auf morgen verschoben.")
+
+    elif action == "done":
+        task_id = task["id"]
+        requests.post(f"https://api.todoist.com/rest/v2/tasks/{task_id}/close",
+                      headers={"Authorization": f"Bearer {TODOIST_API_TOKEN}"})
+        await query.edit_message_text("✔️ Aufgabe als erledigt markiert.")
+
+# Zeitantwort (nach Einplanen)
+async def handle_startzeit(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = update.message.text.strip()
+    try:
+        time_parsed = parser.parse(text, fuzzy=True)
+        now = datetime.now()
+        start = now.replace(hour=time_parsed.hour, minute=time_parsed.minute, second=0, microsecond=0)
+        end = start + timedelta(minutes=60)
+        task = context.user_data.pop("plan_task")
+
+        creds = load_credentials()
+        service = build("calendar", "v3", credentials=creds)
+        event = {
+            "summary": task["content"],
+            "start": {"dateTime": start.isoformat(), "timeZone": "Europe/Berlin"},
+            "end": {"dateTime": end.isoformat(), "timeZone": "Europe/Berlin"}
+        }
+        service.events().insert(calendarId="primary", body=event).execute()
+
+        await update.message.reply_text(f"✅ '{task['content']}' wurde eingeplant: {start.strftime('%H:%M')}–{end.strftime('%H:%M')}")
+    except Exception as e:
+        await update.message.reply_text("❌ Konnte die Zeit nicht verstehen. Bitte gib z.\u202fB. 14:00 an.")
+
+
+
 # Tagesplanung (/planung)
 
 def get_busy_times(creds, start_time, end_time):
@@ -384,7 +467,12 @@ def main():
     app.add_handler(MessageHandler(filters.TEXT & filters.Regex("^(Ja|Nein|ja|nein)$"), handle_yes_no))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, frage))
     app.add_handler(CallbackQueryHandler(button_handler))
+    app.add_handler(CommandHandler("todo", todo))
+    app.add_handler(CallbackQueryHandler(todo_button_handler, pattern="^(plan|verschiebe|done)_"))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_startzeit))
 
+
+    
     app.run_polling()
 
    
