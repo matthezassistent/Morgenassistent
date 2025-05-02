@@ -341,55 +341,6 @@ def plan_tasks_in_blocks(tasks, free_blocks):
 def yes_no_keyboard():
     return ReplyKeyboardMarkup([["Ja", "Nein"]], one_time_keyboard=True, resize_keyboard=True)
 
-async def planung(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("🧠 Ich plane deinen Tag…")
-    creds = load_credentials()
-
-    # Lokale Zeit holen (Berlin)
-    tz = pytz.timezone("Europe/Berlin")
-    now = datetime.now(tz)
-
-    # Tagesende festlegen (18:00 Uhr)
-    end = tz.localize(datetime(now.year, now.month, now.day, 18, 0))
-
-    # Wenn bereits nach 18:00 → auf nächsten Tag verschieben
-    if end <= now:
-        end += timedelta(days=1)
-
-    tasks = get_todoist_tasks_with_duration()
-    busy = get_busy_times(creds, now, end)
-    free = find_free_blocks(busy, now, end)
-    plan, remaining = plan_tasks_in_blocks(tasks, free)
-
-    msg = "📋 Vorschlag für deine Aufgabenplanung:\n"
-    for item in plan:
-        msg += f"{item['start'].strftime('%H:%M')} – {item['end'].strftime('%H:%M')}: {item['task']}\n"
-    if remaining:
-        msg += "\n🕓 Diese Aufgaben würde ich auf morgen verschieben:\n"
-        for r in remaining:
-            msg += f"• {r['content']}\n"
-    msg += "\nSoll ich das so eintragen?"
-    await update.message.reply_text(msg, reply_markup=yes_no_keyboard())
-
-    context.user_data["geplanter_plan"] = plan
-
-async def handle_yes_no(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = update.message.text.strip().lower()
-    if text == "ja" and "geplanter_plan" in context.user_data:
-        plan = context.user_data.pop("geplanter_plan")
-        creds = load_credentials()
-        service = build("calendar", "v3", credentials=creds)
-        for item in plan:
-            event = {
-                'summary': item['task'],
-                'start': {'dateTime': item['start'].isoformat(), 'timeZone': 'Europe/Berlin'},
-                'end': {'dateTime': item['end'].isoformat(), 'timeZone': 'Europe/Berlin'}
-            }
-            service.events().insert(calendarId='primary', body=event).execute()
-        await update.message.reply_text("✅ Planung wurde eingetragen.")
-    elif text == "nein":
-        context.user_data.pop("geplanter_plan", None)
-        await update.message.reply_text("❌ Planung verworfen.")
 
 # Tageszusammenfassung
 
