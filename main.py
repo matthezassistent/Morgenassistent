@@ -422,7 +422,6 @@ def main():
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("termin", termin))
     app.add_handler(CommandHandler("todo", todo))
-    app.add_handler(MessageHandler(filters.TEXT & filters.Regex("^(Ja|Nein|ja|nein)$"), handle_yes_no))
     app.add_handler(CallbackQueryHandler(button_handler))
     app.add_handler(CallbackQueryHandler(todo_button_handler, pattern="^(plan|verschiebe|done)_"))
 
