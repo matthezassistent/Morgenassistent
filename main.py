@@ -192,6 +192,7 @@ async def termin(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
+    print(f"/termin button gedrückt: {query.data}")
     user_id = query.from_user.id
     if query.data == "confirm" and user_id in pending_events:
         parsed = pending_events.pop(user_id)
@@ -246,6 +247,7 @@ async def todo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def todo_button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
+    print(f"/todo button gedrückt: {query.data}")
     user_id = query.from_user.id
 
     action, number = query.data.split("_")
@@ -413,6 +415,7 @@ async def post_init(application):
 
     scheduler.start()
     print("✅ Scheduler gestartet.")
+    
 # Start
 
 def main():
@@ -422,14 +425,22 @@ def main():
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("termin", termin))
     app.add_handler(CommandHandler("todo", todo))
-    app.add_handler(CallbackQueryHandler(button_handler))
+
+    # Textnachricht mit "Ja"/"Nein" – vorerst weggelassen oder hinzufügen, wenn du brauchst
+
+    # Zuerst der spezifische Callback-Handler für /todo Buttons
     app.add_handler(CallbackQueryHandler(todo_button_handler, pattern="^(plan|verschiebe|done)_"))
 
-    # Zentraler Text-Handler entscheidet selbst, was zu tun ist
+    # Dann der generische Callback-Handler für /termin Buttons
+    app.add_handler(CallbackQueryHandler(button_handler))
+
+    # Zentraler Text-Handler für Startzeit und Kalenderfragen
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
 
-    app.run_polling()   
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    app.run_polling()
+    
+    
+    async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     print("-> /start empfangen")
     await update.message.reply_text("👋 Hallo! Ich bin dein Assistent.")
 
