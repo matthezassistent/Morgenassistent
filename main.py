@@ -341,7 +341,14 @@ def plan_tasks_in_blocks(tasks, free_blocks):
 def yes_no_keyboard():
     return ReplyKeyboardMarkup([["Ja", "Nein"]], one_time_keyboard=True, resize_keyboard=True)
 
+# Texthandling
 
+async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if "plan_task" in context.user_data:
+        await handle_startzeit(update, context)
+        context.user_data.pop("plan_task", None)
+    else:
+        await frage(update, context)
 # Tageszusammenfassung
 
 def generate_event_summary(date):
@@ -414,18 +421,15 @@ def main():
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("termin", termin))
-    app.add_handler(MessageHandler(filters.TEXT & filters.Regex("^(Ja|Nein|ja|nein)$"), handle_yes_no))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, frage))
-    app.add_handler(CallbackQueryHandler(button_handler))
     app.add_handler(CommandHandler("todo", todo))
+    app.add_handler(MessageHandler(filters.TEXT & filters.Regex("^(Ja|Nein|ja|nein)$"), handle_yes_no))
+    app.add_handler(CallbackQueryHandler(button_handler))
     app.add_handler(CallbackQueryHandler(todo_button_handler, pattern="^(plan|verschiebe|done)_"))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_startzeit))
 
+    # Zentraler Text-Handler entscheidet selbst, was zu tun ist
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
 
-    
-    app.run_polling()
-
-   
+    app.run_polling()   
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     print("-> /start empfangen")
     await update.message.reply_text("👋 Hallo! Ich bin dein Assistent.")
