@@ -387,6 +387,7 @@ async def frage(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chunks = generate_event_summary(date)
     for chunk in chunks:
         await update.message.reply_text(chunk[:4000])
+        
 async def send_morning_summary(bot: Bot):
     print("⏰ Sende Morgenzusammenfassung…")
     today = datetime.utcnow().astimezone(pytz.timezone("Europe/Berlin"))
@@ -409,6 +410,7 @@ async def post_init(application):
     # 🕓 Morgenzusammenfassung
     scheduler.add_job(send_morning_summary, 'cron', hour=6, minute=40, args=[bot])
     scheduler.add_job(send_morning_summary, 'cron', hour=10, minute=0, args=[bot])
+    scheduler.add_job(send_morning_summary, 'cron', hour=12, minute=15, args=[bot])
     
     # 🌙 Abendzusammenfassung
     scheduler.add_job(send_evening_summary, 'cron', hour=21, minute=50, args=[bot])
