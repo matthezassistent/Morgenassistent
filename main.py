@@ -12,7 +12,7 @@ from datetime import datetime, timedelta, date, time
 from dateutil import parser
 def interpret_date_naturally(text: str) -> datetime | None:
     text = text.lower()
-    now = datetime.now()
+    now = datetime.now(pytz.timezone("Europe/Berlin"))
 
     if "heute" in text:
         return now
@@ -103,9 +103,9 @@ def generate_chatgpt_briefing(summary):
             temperature=0.7
         )
         return response.choices[0].message["content"].strip()
-    except:
+    except Exception as e:
+        print(f"GPT-Fehler: {e}")
         return None
-
 # Todoist
 
 def get_todoist_tasks():
@@ -413,6 +413,7 @@ async def post_init(application):
     scheduler.add_job(send_morning_summary, 'cron', hour=12, minute=35, args=[bot])
     
     # 🌙 Abendzusammenfassung
+    scheduler.add_job(send_evening_summary, 'cron', hour=20, minute=15, args=[bot])
     scheduler.add_job(send_evening_summary, 'cron', hour=21, minute=50, args=[bot])
 
     scheduler.start()
@@ -422,12 +423,12 @@ async def post_init(application):
 
 def main():
     global app
-    app = ApplicationBuilder().token(BOT_TOKEN).build()
+    app = ApplicationBuilder().token(BOT_TOKEN).post_init(post_init).build()
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("termin", termin))
     app.add_handler(CommandHandler("todo", todo))
-
+    app.add_handler(CommandHandler("frage", frage))
     # Textnachricht mit "Ja"/"Nein" – vorerst weggelassen oder hinzufügen, wenn du brauchst
 
     # Zuerst der spezifische Callback-Handler für /todo Buttons
