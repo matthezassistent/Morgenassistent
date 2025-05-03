@@ -440,7 +440,7 @@ def main():
     app.run_polling()
     
     
-    async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     print("-> /start empfangen")
     await update.message.reply_text("👋 Hallo! Ich bin dein Assistent.")
 
