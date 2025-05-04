@@ -70,22 +70,32 @@ def list_all_calendars():
 def get_events_for_date(target_date):
     creds = load_credentials()
     service = build('calendar', 'v3', credentials=creds)
+    
     start = target_date.replace(hour=0, minute=0, second=0).isoformat() + 'Z'
     end = target_date.replace(hour=23, minute=59, second=59).isoformat() + 'Z'
+    
     events_all = []
     calendars = list_all_calendars()
+    
     for name, cal_id in calendars:
-        events = service.events().list(
-            calendarId=cal_id,
-            timeMin=start,
-            timeMax=end,
-            singleEvents=True,
-            orderBy='startTime'
-        ).execute().get('items', [])
-        if events:
-            events_all.append((name, events))
+        # Problematische Kalender ausschließen
+        if "#weather" in cal_id or "holiday" in cal_id:
+            continue
+        try:
+            events = service.events().list(
+                calendarId=cal_id,
+                timeMin=start,
+                timeMax=end,
+                singleEvents=True,
+                orderBy='startTime'
+            ).execute().get('items', [])
+            
+            if events:
+                events_all.append((name, events))
+        except Exception as e:
+            print(f"⚠️ Fehler bei Kalender '{name}' ({cal_id}): {e}")
+    
     return events_all
-
 # GPT Briefing
 
 def generate_chatgpt_briefing(summary):
