@@ -420,6 +420,7 @@ async def post_init(application):
     # 🕓 Morgenzusammenfassung
     scheduler.add_job(send_morning_summary, 'cron', hour=6, minute=40, args=[bot])
     scheduler.add_job(send_morning_summary, 'cron', hour=10, minute=0, args=[bot])
+    scheduler.add_job(send_morning_summary, 'cron', hour=10, minute=55, args=[bot])
     scheduler.add_job(send_morning_summary, 'cron', hour=12, minute=35, args=[bot])
     
     # 🌙 Abendzusammenfassung
