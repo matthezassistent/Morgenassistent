@@ -432,7 +432,7 @@ async def post_init(application):
     
 # Start
 
-def main():
+async def main():
     global app
     app = ApplicationBuilder().token(BOT_TOKEN).post_init(post_init).build()
 
@@ -440,17 +440,14 @@ def main():
     app.add_handler(CommandHandler("termin", termin))
     app.add_handler(CommandHandler("todo", todo))
     app.add_handler(CommandHandler("frage", frage))
-    # Textnachricht mit "Ja"/"Nein" – vorerst weggelassen oder hinzufügen, wenn du brauchst
-
-    # Zuerst der spezifische Callback-Handler für /todo Buttons
     app.add_handler(CallbackQueryHandler(todo_button_handler, pattern="^(plan|verschiebe|done)_"))
-
-    # Dann der generische Callback-Handler für /termin Buttons
     app.add_handler(CallbackQueryHandler(button_handler))
-
-    # Zentraler Text-Handler für Startzeit und Kalenderfragen
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
 
+    await app.initialize()
+    await app.start()
+    await app.updater.start_polling()
+    await app.updater.idle()
     app.run_polling()
     
     
@@ -459,4 +456,5 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("👋 Hallo! Ich bin dein Assistent.")
 
 if __name__ == '__main__':
-    main()
+    import asyncio
+    asyncio.run(main())
