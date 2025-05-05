@@ -124,12 +124,11 @@ def extract_briefings_triggered_by_code(date: datetime.datetime, trigger_code: s
     return results
 
 async def gpt_briefings_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Telegram-Bot-Handler: Gibt GPT-Briefings für Einträge mit '691' im Titel aus."""
     date = datetime.datetime.now(pytz.timezone("Europe/Vienna"))
-    results = extract_briefings_triggered_by_code(date, trigger_code="691")
+    results = extract_briefings_triggered_by_tag(date, trigger_tag="#691")
 
     if not results:
-        return  # Keine Ausgabe, keine Reaktion
+        return  # Keine Ausgabe, kein Kommentar
 
     for original, topic, briefing in results:
         msg = f"📅 *{original}*\n🧠 {briefing}"
