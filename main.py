@@ -8,7 +8,8 @@ import pytz
 import requests
 import asyncio
 import nest_asyncio
-import openai
+import openai import OpenAI
+client = OpenAI(api_key=OPENAI_API_KEY)
 
 from telegram import Update, Bot, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup
 from telegram.ext import (
@@ -79,8 +80,7 @@ def get_events_for_date(target_date):
     return events_all
 
 def generate_gpt_briefing(prompt_text: str) -> str:
-    openai.api_key = OPENAI_API_KEY
-    response = openai.ChatCompletion.create(
+    response = client.chat.completions.create(
         model="gpt-4",
         messages=[
             {"role": "system", "content": "Du bist ein sachlicher Assistent, der kontextuelle Briefings zu Musiktiteln oder Projekten liefert."},
@@ -89,7 +89,7 @@ def generate_gpt_briefing(prompt_text: str) -> str:
         temperature=0.7,
         max_tokens=500,
     )
-    return response["choices"][0]["message"]["content"].strip()
+    return response.choices[0].message.content.strip()
 
 def extract_briefings_triggered_by_code(date: datetime.datetime, trigger_code: str = "691"):
     events_all = get_events_for_date(date)
