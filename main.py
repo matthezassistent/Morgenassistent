@@ -81,60 +81,6 @@ def get_events_for_date(target_date):
             print(f"⚠️ Fehler bei Kalender '{name}' ({cal_id}): {e}")
     return events_all
 
-def generate_gpt_briefing(prompt_text: str) -> str:
-    """Fragt GPT-4 nach einem informativen Briefing zum gegebenen Thema."""
-    try:
-        response = client.chat.completions.create(
-            model="gpt-4",
-            messages=[
-                {"role": "system", "content": "Du bist ein sachlicher Assistent, der kontextuelle Briefings zu Musiktiteln oder Projekten liefert."},
-                {"role": "user", "content": f"Gib mir einen informativen Überblick über: {prompt_text}"}
-            ],
-            temperature=0.7,
-            max_tokens=500,
-        )
-        return response.choices[0].message.content.strip()
-    except Exception as e:
-        print(f"❌ Fehler bei GPT-Abfrage für '{prompt_text}': {e}")
-        return "⚠️ GPT-Briefing konnte nicht erstellt werden."
-
-import re
-
-def extract_briefings_triggered_by_code(date: datetime.datetime, trigger_code: str = "691"):
-    events_all = get_events_for_date(date)
-    results = []
-
-    # Regex: \b bedeutet "Wortgrenze" → nur genaues '691' zählt
-    trigger_pattern = re.compile(rf'\b{re.escape(trigger_code)}\b')
-
-    for cal_name, events in events_all:
-        for event in events:
-            title = event.get("summary", "") or ""
-
-            if trigger_pattern.search(title):
-                topic = trigger_pattern.sub("", title).strip()
-                if not topic:
-                    continue  # Nur "691" im Titel? → überspringen
-                try:
-                    briefing = generate_gpt_briefing(topic)
-                    results.append((title, topic, briefing))
-                except Exception as e:
-                    print(f"❌ GPT-Fehler bei Titel '{title}': {e}")
-
-    return results
-
-async def gpt_briefings_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    date = datetime.datetime.now(pytz.timezone("Europe/Vienna"))
-    results = extract_briefings_triggered_by_tag(date, trigger_tag="#691")
-
-    if not results:
-        return  # Keine Ausgabe, kein Kommentar
-
-    for original, topic, briefing in results:
-        msg = f"📅 *{original}*\n🧠 {briefing}"
-        await update.message.reply_text(msg, parse_mode="Markdown")
-
-
 def get_todoist_tasks():
     try:
         headers = {"Authorization": f"Bearer {TODOIST_API_TOKEN}"}
@@ -377,8 +323,7 @@ async def setup_application() -> Application:
     app.add_handler(CommandHandler("termin", termin))
     app.add_handler(CommandHandler("todo", todo))
     app.add_handler(CommandHandler("frage", frage))
-    app.add_handler(CommandHandler("gptbriefings", gpt_briefings_handler))
-    app.add_handler(CallbackQueryHandler(todo_button_handler, pattern="^(plan|verschiebe|done)_"))
+       app.add_handler(CallbackQueryHandler(todo_button_handler, pattern="^(plan|verschiebe|done)_"))
     app.add_handler(CallbackQueryHandler(button_handler))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
     return app
