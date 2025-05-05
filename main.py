@@ -54,10 +54,13 @@ def list_all_calendars():
 def get_events_for_date(target_date):
     creds = load_credentials()
     service = build('calendar', 'v3', credentials=creds)
-    start = target_date.replace(hour=0, minute=0, second=0).isoformat() + 'Z'
-    end = target_date.replace(hour=23, minute=59, second=59).isoformat() + 'Z'
+
+    start = target_date.replace(hour=0, minute=0, second=0, microsecond=0).astimezone(pytz.utc).isoformat()
+    end = target_date.replace(hour=23, minute=59, second=59, microsecond=0).astimezone(pytz.utc).isoformat()
+
     events_all = []
     calendars = list_all_calendars()
+
     for name, cal_id in calendars:
         if "#weather" in cal_id or "holiday" in cal_id:
             continue
