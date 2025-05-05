@@ -312,7 +312,7 @@ async def post_init(application):
     bot = application.bot
     scheduler = AsyncIOScheduler(timezone="Europe/Berlin")
     scheduler.add_job(send_morning_summary, 'cron', hour=6, minute=40, args=[bot])
-    scheduler.add_job(send_evening_summary, 'cron', hour=21, minute=0, args=[bot])
+    scheduler.add_job(send_evening_summary, 'cron', hour=22, minute=30, args=[bot])
     scheduler.start()
     print("✅ Scheduler gestartet.")
 
