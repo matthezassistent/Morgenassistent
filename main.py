@@ -78,24 +78,50 @@ def get_events_for_date(target_date):
             print(f"⚠️ Fehler bei Kalender '{name}' ({cal_id}): {e}")
     return events_all
 
-def generate_chatgpt_briefing(summary):
-    if not OPENAI_API_KEY:
-        return None
-    try:
-        openai.api_key = OPENAI_API_KEY
-        response = openai.ChatCompletion.create(
-            model="gpt-4",
-            messages=[
-                {"role": "system", "content": "Du bist ein Assistent, der kurze Briefings zu Terminen schreibt."},
-                {"role": "user", "content": f"Erstelle ein kurzes Briefing zu: '{summary}'"}
-            ],
-            max_tokens=100,
-            temperature=0.7
-        )
-        return response.choices[0].message["content"].strip()
-    except Exception as e:
-        print(f"GPT-Fehler: {e}")
-        return None
+def generate_gpt_briefing(prompt_text: str) -> str:
+    openai.api_key = OPENAI_API_KEY
+    response = openai.ChatCompletion.create(
+        model="gpt-4",
+        messages=[
+            {"role": "system", "content": "Du bist ein sachlicher Assistent, der kontextuelle Briefings zu Musiktiteln oder Projekten liefert."},
+            {"role": "user", "content": f"Gib mir einen informativen Überblick über: {prompt_text}"}
+        ],
+        temperature=0.7,
+        max_tokens=500,
+    )
+    return response["choices"][0]["message"]["content"].strip()
+
+def extract_briefings_triggered_by_code(date: datetime.datetime, trigger_code: str = "691"):
+    events_all = get_events_for_date(date)
+    results = []
+
+    for cal_name, events in events_all:
+        for event in events:
+            title = event.get("summary", "")
+            description = event.get("description", "")
+            full_text = f"{title} {description}"
+
+            if trigger_code in full_text:
+                # GPT soll NICHT über "691" schreiben, sondern über den eigentlichen Titel
+                cleaned = full_text.replace(trigger_code, "").strip()
+                try:
+                    briefing = generate_gpt_briefing(cleaned)
+                    results.append((title, cleaned, briefing))
+                except Exception as e:
+                    print(f"❌ GPT-Fehler bei Titel '{title}': {e}")
+
+    return results
+
+async def gpt_briefings_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    date = datetime.datetime.now(pytz.timezone("Europe/Vienna"))
+    results = extract_briefings_triggered_by_code(date, trigger_code="691")
+    if not results:
+        await update.message.reply_text("📭 Keine Einträge mit Trigger '691' für heute gefunden.")
+        return
+    for original, cleaned, briefing in results:
+        msg = f"📅 *{original}*\n🎯 Thema: `{cleaned}`\n🧠 {briefing}"
+        await update.message.reply_text(msg, parse_mode="Markdown")
+
 
 def get_todoist_tasks():
     try:
@@ -339,6 +365,7 @@ async def setup_application() -> Application:
     app.add_handler(CommandHandler("termin", termin))
     app.add_handler(CommandHandler("todo", todo))
     app.add_handler(CommandHandler("frage", frage))
+    app.add_handler(CommandHandler("gptbriefings", gpt_briefings_handler))
     app.add_handler(CallbackQueryHandler(todo_button_handler, pattern="^(plan|verschiebe|done)_"))
     app.add_handler(CallbackQueryHandler(button_handler))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
