@@ -329,7 +329,9 @@ async def setup_application() -> Application:
     return app
 
 if __name__ == '__main__':
+    import asyncio
     nest_asyncio.apply()
-    loop = asyncio.get_event_loop()
-    app = loop.run_until_complete(setup_application())
-    app.run_polling()
+    asyncio.get_event_loop().create_task(setup_application()).add_done_callback(
+        lambda fut: asyncio.create_task(fut.result().run_polling())
+    )
+    asyncio.get_event_loop().run_forever()
