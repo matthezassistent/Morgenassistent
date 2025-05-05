@@ -315,10 +315,13 @@ async def setup_application() -> Application:
     app.add_handler(CallbackQueryHandler(button_handler))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
     return app
-
 if __name__ == '__main__':
-    async def main():
-        app = await setup_application()
-        await app.run_polling()
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
 
-    asyncio.run(main())
+    if loop and loop.is_running():
+        loop.create_task(main())
+    else:
+        asyncio.run(main())
