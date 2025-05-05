@@ -6,6 +6,56 @@ import datetime
 import pytz
 import requests
 import asyncio
+import nest_asyncio
+from telegram import Update
+from telegram.ext import (
+    ApplicationBuilder,
+    Application,
+    CommandHandler,
+    CallbackQueryHandler,
+    MessageHandler,
+    ContextTypes,
+    filters,
+)
+
+# Deine Handler
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    print("-> /start empfangen")
+    await update.message.reply_text("👋 Hallo! Ich bin dein Assistent.")
+
+# Weitere Handler hier definieren:
+# - termin(update, context)
+# - todo(update, context)
+# - frage(update, context)
+# - todo_button_handler(update, context)
+# - button_handler(update, context)
+# - handle_text(update, context)
+# - post_init(app)
+
+# Aufbau der Application
+async def setup_application() -> Application:
+    app = ApplicationBuilder().token(BOT_TOKEN).post_init(post_init).build()
+
+    # WICHTIG: Webhook deaktivieren, damit Polling funktioniert
+    await app.bot.delete_webhook(drop_pending_updates=True)
+
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("termin", termin))
+    app.add_handler(CommandHandler("todo", todo))
+    app.add_handler(CommandHandler("frage", frage))
+    app.add_handler(CallbackQueryHandler(todo_button_handler, pattern="^(plan|verschiebe|done)_"))
+    app.add_handler(CallbackQueryHandler(button_handler))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
+
+    return app
+
+# Einstiegspunkt
+if __name__ == '__main__':
+    nest_asyncio.apply()
+    loop = asyncio.get_event_loop()
+    app = loop.run_until_complete(setup_application())
+    app.run_polling()
+
 import openai
 import telegram
 from datetime import datetime, timedelta, date, time
@@ -431,6 +481,56 @@ async def post_init(application):
     print("✅ Scheduler gestartet.")
     
 # Start
+import asyncio
+import nest_asyncio
+from telegram import Update
+from telegram.ext import (
+    ApplicationBuilder,
+    Application,
+    CommandHandler,
+    CallbackQueryHandler,
+    MessageHandler,
+    ContextTypes,
+    filters,
+)
+
+# Deine Handler
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    print("-> /start empfangen")
+    await update.message.reply_text("👋 Hallo! Ich bin dein Assistent.")
+
+# Weitere Handler hier definieren:
+# - termin(update, context)
+# - todo(update, context)
+# - frage(update, context)
+# - todo_button_handler(update, context)
+# - button_handler(update, context)
+# - handle_text(update, context)
+# - post_init(app)
+
+# Aufbau der Application
+async def setup_application() -> Application:
+    app = ApplicationBuilder().token(BOT_TOKEN).post_init(post_init).build()
+
+    # WICHTIG: Webhook deaktivieren, damit Polling funktioniert
+    await app.bot.delete_webhook(drop_pending_updates=True)
+
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("termin", termin))
+    app.add_handler(CommandHandler("todo", todo))
+    app.add_handler(CommandHandler("frage", frage))
+    app.add_handler(CallbackQueryHandler(todo_button_handler, pattern="^(plan|verschiebe|done)_"))
+    app.add_handler(CallbackQueryHandler(button_handler))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
+
+    return app
+
+# Einstiegspunkt
+if __name__ == '__main__':
+    nest_asyncio.apply()
+    loop = asyncio.get_event_loop()
+    app = loop.run_until_complete(setup_application())
+    app.run_polling()
 
 async def main():
     global app
@@ -449,22 +549,26 @@ async def main():
 
     await app.run_polling()
     
-    
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    print("-> /start empfangen")
-    await update.message.reply_text("👋 Hallo! Ich bin dein Assistent.")
 
-import asyncio
+async def setup_application() -> Application:
+    app = ApplicationBuilder().token(BOT_TOKEN).post_init(post_init).build()
 
+    # WICHTIG: Webhook deaktivieren, damit Polling funktioniert
+    await app.bot.delete_webhook(drop_pending_updates=True)
+
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("termin", termin))
+    app.add_handler(CommandHandler("todo", todo))
+    app.add_handler(CommandHandler("frage", frage))
+    app.add_handler(CallbackQueryHandler(todo_button_handler, pattern="^(plan|verschiebe|done)_"))
+    app.add_handler(CallbackQueryHandler(button_handler))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
+
+    return app
+
+# Einstiegspunkt
 if __name__ == '__main__':
-    try:
-        asyncio.get_event_loop().run_until_complete(main())
-    except RuntimeError as e:
-        if str(e).startswith("This event loop is already running"):
-            # Fall-back für bereits laufenden Loop (z. B. in bestimmten Umgebungen)
-            import nest_asyncio
-            nest_asyncio.apply()
-            asyncio.get_event_loop().run_until_complete(main())
-        else:
-            raise
-
+    nest_asyncio.apply()
+    loop = asyncio.get_event_loop()
+    app = loop.run_until_complete(setup_application())
+    app.run_polling()
