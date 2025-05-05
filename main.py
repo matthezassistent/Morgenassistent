@@ -82,46 +82,51 @@ def get_events_for_date(target_date):
     return events_all
 
 def generate_gpt_briefing(prompt_text: str) -> str:
-    response = client.chat.completions.create(
-        model="gpt-4",
-        messages=[
-            {"role": "system", "content": "Du bist ein sachlicher Assistent, der kontextuelle Briefings zu Musiktiteln oder Projekten liefert."},
-            {"role": "user", "content": f"Gib mir einen informativen Überblick über: {prompt_text}"}
-        ],
-        temperature=0.7,
-        max_tokens=500,
-    )
-    return response.choices[0].message.content.strip()
+    """Fragt GPT-4 nach einem informativen Briefing zum gegebenen Thema."""
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4",
+            messages=[
+                {"role": "system", "content": "Du bist ein sachlicher Assistent, der kontextuelle Briefings zu Musiktiteln oder Projekten liefert."},
+                {"role": "user", "content": f"Gib mir einen informativen Überblick über: {prompt_text}"}
+            ],
+            temperature=0.7,
+            max_tokens=500,
+        )
+        return response.choices[0].message.content.strip()
+    except Exception as e:
+        print(f"❌ Fehler bei GPT-Abfrage für '{prompt_text}': {e}")
+        return "⚠️ GPT-Briefing konnte nicht erstellt werden."
 
 def extract_briefings_triggered_by_code(date: datetime.datetime, trigger_code: str = "691"):
+    """Durchsucht alle Kalendereinträge nach einem Trigger im *Titel* und erzeugt GPT-Briefings."""
     events_all = get_events_for_date(date)
     results = []
 
     for cal_name, events in events_all:
         for event in events:
-            title = event.get("summary", "")
-            description = event.get("description", "")
-            full_text = f"{title} {description}"
+            title = event.get("summary", "") or ""
 
-            if trigger_code in full_text:
-                # GPT soll NICHT über "691" schreiben, sondern über den eigentlichen Titel
-                cleaned = full_text.replace(trigger_code, "").strip()
-                try:
-                    briefing = generate_gpt_briefing(cleaned)
-                    results.append((title, cleaned, briefing))
-                except Exception as e:
-                    print(f"❌ GPT-Fehler bei Titel '{title}': {e}")
+            if trigger_code in title:
+                # Nur den Titel als Thema, aber ohne Trigger-Code
+                topic = title.replace(trigger_code, "", 1).strip()
+                if not topic:
+                    continue  # Titel ist nur '691' → überspringen
+                briefing = generate_gpt_briefing(topic)
+                results.append((title, topic, briefing))
 
     return results
 
 async def gpt_briefings_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Telegram-Bot-Handler: Gibt GPT-Briefings für Einträge mit '691' im Titel aus."""
     date = datetime.datetime.now(pytz.timezone("Europe/Vienna"))
     results = extract_briefings_triggered_by_code(date, trigger_code="691")
+
     if not results:
-        await update.message.reply_text("📭 Keine Einträge mit Trigger '691' für heute gefunden.")
-        return
-    for original, cleaned, briefing in results:
-        msg = f"📅 *{original}*\n🎯 Thema: `{cleaned}`\n🧠 {briefing}"
+        return  # Keine Ausgabe, keine Reaktion
+
+    for original, topic, briefing in results:
+        msg = f"📅 *{original}*\n🧠 {briefing}"
         await update.message.reply_text(msg, parse_mode="Markdown")
 
 
