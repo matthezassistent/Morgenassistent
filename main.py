@@ -98,22 +98,28 @@ def generate_gpt_briefing(prompt_text: str) -> str:
         print(f"❌ Fehler bei GPT-Abfrage für '{prompt_text}': {e}")
         return "⚠️ GPT-Briefing konnte nicht erstellt werden."
 
+import re
+
 def extract_briefings_triggered_by_code(date: datetime.datetime, trigger_code: str = "691"):
-    """Durchsucht alle Kalendereinträge nach einem Trigger im *Titel* und erzeugt GPT-Briefings."""
     events_all = get_events_for_date(date)
     results = []
+
+    # Regex: \b bedeutet "Wortgrenze" → nur genaues '691' zählt
+    trigger_pattern = re.compile(rf'\b{re.escape(trigger_code)}\b')
 
     for cal_name, events in events_all:
         for event in events:
             title = event.get("summary", "") or ""
 
-            if trigger_code in title:
-                # Nur den Titel als Thema, aber ohne Trigger-Code
-                topic = title.replace(trigger_code, "", 1).strip()
+            if trigger_pattern.search(title):
+                topic = trigger_pattern.sub("", title).strip()
                 if not topic:
-                    continue  # Titel ist nur '691' → überspringen
-                briefing = generate_gpt_briefing(topic)
-                results.append((title, topic, briefing))
+                    continue  # Nur "691" im Titel? → überspringen
+                try:
+                    briefing = generate_gpt_briefing(topic)
+                    results.append((title, topic, briefing))
+                except Exception as e:
+                    print(f"❌ GPT-Fehler bei Titel '{title}': {e}")
 
     return results
 
