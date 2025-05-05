@@ -1,4 +1,3 @@
-
 import os
 import base64
 import pickle
@@ -7,11 +6,7 @@ import datetime
 import pytz
 import requests
 import asyncio
-import nest_asyncio
 from openai import OpenAI
-
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-client = OpenAI(api_key=OPENAI_API_KEY)
 
 from telegram import Update, Bot, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup
 from telegram.ext import (
@@ -121,9 +116,6 @@ def generate_event_summary(date):
                 start_dt = parser.parse(start_raw).astimezone(tz)
                 start_time = start_dt.strftime("%H:%M") if 'T' in start_raw else "Ganztägig"
                 block += f"\n- {start_time}: {e.get('summary', 'Kein Titel')}"
-                briefing = generate_gpt_briefing(e.get('summary', ''))
-                if briefing:
-                    block += f"\n  💬 {briefing}"
             summary.append(block)
     todo = get_todoist_tasks()
     if todo:
@@ -143,10 +135,6 @@ async def send_evening_summary(bot: Bot):
     chunks = generate_event_summary(tomorrow)
     for chunk in chunks:
         await bot.send_message(chat_id=CHAT_ID, text=chunk[:4000])
-
-# ============================
-# Telegram Handler & Logik
-# ============================
 
 pending_events = {}
 pending_tasks = {}
@@ -312,7 +300,7 @@ async def post_init(application):
     bot = application.bot
     scheduler = AsyncIOScheduler(timezone="Europe/Berlin")
     scheduler.add_job(send_morning_summary, 'cron', hour=6, minute=40, args=[bot])
-    scheduler.add_job(send_evening_summary, 'cron', hour=22, minute=30, args=[bot])
+    scheduler.add_job(send_evening_summary, 'cron', hour=23, minute=00, args=[bot])
     scheduler.start()
     print("✅ Scheduler gestartet.")
 
@@ -329,9 +317,8 @@ async def setup_application() -> Application:
     return app
 
 if __name__ == '__main__':
-    import asyncio
-    nest_asyncio.apply()
-    asyncio.get_event_loop().create_task(setup_application()).add_done_callback(
-        lambda fut: asyncio.create_task(fut.result().run_polling())
-    )
-    asyncio.get_event_loop().run_forever()
+    async def main():
+        app = await setup_application()
+        await app.run_polling()
+
+    asyncio.run(main())
