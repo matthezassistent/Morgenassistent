@@ -436,6 +436,9 @@ async def main():
     global app
     app = ApplicationBuilder().token(BOT_TOKEN).post_init(post_init).build()
 
+    # WICHTIG: Webhook deaktivieren, damit Polling funktioniert
+    await app.bot.delete_webhook(drop_pending_updates=True)
+
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("termin", termin))
     app.add_handler(CommandHandler("todo", todo))
@@ -444,11 +447,7 @@ async def main():
     app.add_handler(CallbackQueryHandler(button_handler))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
 
-    await app.initialize()
-    await app.start()
-    await app.updater.start_polling()
-    await app.updater.idle()
-    app.run_polling()
+    await app.run_polling()
     
     
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
