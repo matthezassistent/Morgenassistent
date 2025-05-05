@@ -163,7 +163,7 @@ def generate_event_summary(date):
                 start_dt = parser.parse(start_raw).astimezone(tz)
                 start_time = start_dt.strftime("%H:%M") if 'T' in start_raw else "Ganztägig"
                 block += f"\n- {start_time}: {e.get('summary', 'Kein Titel')}"
-                briefing = generate_chatgpt_briefing(e.get('summary', ''))
+                briefing = generate_gpt_briefing(e.get('summary', ''))
                 if briefing:
                     block += f"\n  💬 {briefing}"
             summary.append(block)
