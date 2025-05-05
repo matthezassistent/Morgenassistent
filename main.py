@@ -7,6 +7,7 @@ import pytz
 import requests
 import asyncio
 import nest_asyncio
+
 from telegram import Update, Bot, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup
 from telegram.ext import (
     ApplicationBuilder,
@@ -17,6 +18,7 @@ from telegram.ext import (
     ContextTypes,
     filters,
 )
+
 import openai
 from dateutil import parser
 from dateparser.search import search_dates
@@ -24,14 +26,14 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from googleapiclient.discovery import build
 from google.oauth2.credentials import Credentials
 
-# ENV-VARIABLEN
+# ENV
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 CHAT_ID = 8011259706
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 TODOIST_API_TOKEN = os.getenv("TODOIST_API_TOKEN")
 PORT = int(os.environ.get("PORT", 8443))
 
-# TOKEN.PKL erzeugen (Render-kompatibel)
+# Token.pickle erzeugen
 if not os.path.exists("token.pkl"):
     encoded_token = os.getenv("TOKEN_PKL_BASE64")
     if encoded_token:
@@ -94,10 +96,161 @@ def generate_chatgpt_briefing(summary):
     except Exception as e:
         print(f"GPT-Fehler: {e}")
         return None
+# Pending-Speicher für Termine & Todos
+pending_events = {}
+pending_tasks = {}
 
-# Handlers (gekürzt)
-# -> Du behältst alle deine bestehenden Handler-Funktionen:
-#    - start, termin, todo, frage, button_handler, todo_button_handler, handle_text, usw.
+# /start
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("👋 Hallo! Ich bin dein Assistent.")
+
+# /termin – Eingabe in natürlicher Sprache
+async def parse_event(text):
+    try:
+        found_dates = search_dates(text, languages=['de'])
+        if not found_dates:
+            return None
+        start_dt = found_dates[0][1]
+        if "-" in text:
+            times = text.split("-")
+            try:
+                start_time = parser.parse(times[0], fuzzy=True)
+                end_time = parser.parse(times[1], fuzzy=True)
+                start_dt = start_dt.replace(hour=start_time.hour, minute=start_time.minute)
+                end_dt = start_dt.replace(hour=end_time.hour, minute=end_time.minute)
+            except:
+                end_dt = start_dt + datetime.timedelta(hours=1)
+        else:
+            end_dt = start_dt + datetime.timedelta(hours=1)
+        ort = None
+        if " in " in text:
+            ort = text.split(" in ")[-1]
+        elif " bei " in text:
+            ort = text.split(" bei ")[-1]
+        title = text.split(" findet")[0] if " findet" in text else text.split(" am")[0]
+        return {
+            "title": title.strip(),
+            "start": start_dt,
+            "end": end_dt,
+            "location": ort.strip() if ort else None
+        }
+    except:
+        return None
+
+async def termin(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    text = update.message.text.replace("/termin", "").strip()
+    parsed = await parse_event(text)
+    if not parsed:
+        await update.message.reply_text("❌ Konnte den Termin nicht verstehen.")
+        return
+    pending_events[user_id] = parsed
+    message = f"📅 **Geplanter Termin:**\n\nTitel: {parsed['title']}\nStart: {parsed['start'].strftime('%d.%m.%Y %H:%M')}\nEnde: {parsed['end'].strftime('%d.%m.%Y %H:%M')}"
+    if parsed.get("location"):
+        message += f"\nOrt: {parsed['location']}"
+    buttons = [[
+        InlineKeyboardButton("✅ Ja, eintragen", callback_data="confirm"),
+        InlineKeyboardButton("❌ Nein", callback_data="cancel")
+    ]]
+    reply_markup = InlineKeyboardMarkup(buttons)
+    await update.message.reply_text(message, reply_markup=reply_markup, parse_mode="Markdown")
+
+# Termin bestätigen oder abbrechen
+async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    user_id = query.from_user.id
+    if query.data == "confirm" and user_id in pending_events:
+        parsed = pending_events.pop(user_id)
+        try:
+            creds = load_credentials()
+            service = build('calendar', 'v3', credentials=creds)
+            event = {
+                'summary': parsed['title'],
+                'start': {'dateTime': parsed['start'].isoformat(), 'timeZone': 'Europe/Berlin'},
+                'end': {'dateTime': parsed['end'].isoformat(), 'timeZone': 'Europe/Berlin'},
+            }
+            if parsed.get("location"):
+                event['location'] = parsed["location"]
+            service.events().insert(calendarId='primary', body=event).execute()
+            await query.edit_message_text("✅ Termin wurde eingetragen!")
+        except Exception as e:
+            await query.edit_message_text("❌ Fehler beim Eintragen.")
+    else:
+        pending_events.pop(user_id, None)
+        await query.edit_message_text("❌ Termin wurde verworfen.")
+
+# /todo – Aufgaben anzeigen mit Buttons
+async def todo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    headers = {"Authorization": f"Bearer {TODOIST_API_TOKEN}"}
+    params = {"filter": "today | overdue"}
+    r = requests.get("https://api.todoist.com/rest/v2/tasks", headers=headers, params=params)
+    tasks = r.json()
+    if not tasks:
+        await update.message.reply_text("✅ Keine offenen Aufgaben.")
+        return
+    pending_tasks[update.effective_user.id] = {str(i): t for i, t in enumerate(tasks, start=1)}
+    for i, task in enumerate(tasks, start=1):
+        buttons = [[
+            InlineKeyboardButton("✅ Einplanen", callback_data=f"plan_{i}"),
+            InlineKeyboardButton("⏭️ Verschieben", callback_data=f"verschiebe_{i}"),
+            InlineKeyboardButton("✔️ Erledigt", callback_data=f"done_{i}")
+        ]]
+        await update.message.reply_text(f"{i}. {task['content']}", reply_markup=InlineKeyboardMarkup(buttons))
+
+# Callback für /todo
+async def todo_button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    user_id = query.from_user.id
+    action, number = query.data.split("_")
+    task = pending_tasks.get(user_id, {}).get(number)
+    if not task:
+        await query.edit_message_text("⚠️ Aufgabe nicht gefunden.")
+        return
+    if action == "plan":
+        context.user_data["plan_task"] = task
+        await query.edit_message_text(f"Wann soll ich '{task['content']}' einplanen? (z.B. 14:00)")
+    elif action == "verschiebe":
+        task_id = task["id"]
+        new_due = (datetime.datetime.now() + datetime.timedelta(days=1)).strftime("%Y-%m-%d")
+        requests.post(f"https://api.todoist.com/rest/v2/tasks/{task_id}",
+                      headers={"Authorization": f"Bearer {TODOIST_API_TOKEN}"},
+                      json={"due_date": new_due})
+        await query.edit_message_text("⏭️ Aufgabe auf morgen verschoben.")
+    elif action == "done":
+        task_id = task["id"]
+        requests.post(f"https://api.todoist.com/rest/v2/tasks/{task_id}/close",
+                      headers={"Authorization": f"Bearer {TODOIST_API_TOKEN}"})
+        await query.edit_message_text("✔️ Aufgabe als erledigt markiert.")
+# Aufgabenplanung nach Zeitangabe
+async def handle_startzeit(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = update.message.text.strip()
+    try:
+        time_parsed = parser.parse(text, fuzzy=True)
+        now = datetime.datetime.now(pytz.timezone("Europe/Berlin"))
+        start = now.replace(hour=time_parsed.hour, minute=time_parsed.minute, second=0, microsecond=0)
+        end = start + datetime.timedelta(minutes=60)
+        task = context.user_data.pop("plan_task")
+
+        creds = load_credentials()
+        service = build("calendar", "v3", credentials=creds)
+        event = {
+            "summary": task["content"],
+            "start": {"dateTime": start.isoformat(), "timeZone": "Europe/Berlin"},
+            "end": {"dateTime": end.isoformat(), "timeZone": "Europe/Berlin"}
+        }
+        service.events().insert(calendarId="primary", body=event).execute()
+        await update.message.reply_text(f"✅ '{task['content']}' wurde eingeplant: {start.strftime('%H:%M')}–{end.strftime('%H:%M')}")
+    except Exception as e:
+        await update.message.reply_text("❌ Konnte die Zeit nicht verstehen. Bitte gib z.B. 14:00 an.")
+
+# Texterkennung (für freie Eingabe)
+async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if "plan_task" in context.user_data:
+        await handle_startzeit(update, context)
+    else:
+        await frage(update, context)
 
 # Datum interpretieren
 def interpret_date_naturally(text: str) -> datetime.datetime | None:
@@ -112,7 +265,7 @@ def interpret_date_naturally(text: str) -> datetime.datetime | None:
     result = search_dates(text, languages=["de"])
     return result[0][1] if result else None
 
-# Tageszusammenfassung
+# Termin- und Aufgabenübersicht generieren
 def generate_event_summary(date):
     tz = pytz.timezone("Europe/Berlin")
     summary = []
@@ -136,35 +289,40 @@ def generate_event_summary(date):
         summary.append("📝 Aufgaben:\n" + todo)
     return summary
 
-# Zusammenfassungen senden
-async def send_morning_summary(bot: Bot):
-    print("⏰ Sende Morgenzusammenfassung…")
-    today = datetime.datetime.utcnow().astimezone(pytz.timezone("Europe/Berlin"))
-    chunks = generate_event_summary(today)
+# GPT-/Kalender-Zusammenfassung bei Frage
+async def frage(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = update.message.text.strip().lower()
+    date = interpret_date_naturally(text)
+    if not date:
+        await update.message.reply_text("❌ Konnte kein Datum erkennen.")
+        return
+    chunks = generate_event_summary(date)
     for chunk in chunks:
-        await bot.send_message(chat_id=CHAT_ID, text=chunk[:4000])
-
-async def send_evening_summary(bot: Bot):
-    print("🌙 Sende Abendzusammenfassung…")
-    tomorrow = datetime.datetime.utcnow().astimezone(pytz.timezone("Europe/Berlin")) + datetime.timedelta(days=1)
-    chunks = generate_event_summary(tomorrow)
-    for chunk in chunks:
-        await bot.send_message(chat_id=CHAT_ID, text=chunk[:4000])
-
-# Post-Init
+        await update.message.reply_text(chunk[:4000])
+# Post-Init mit Scheduler
 async def post_init(application):
     await asyncio.sleep(1)
     bot = application.bot
     scheduler = AsyncIOScheduler(timezone="Europe/Berlin")
+    
+    # 🕓 Morgenzusammenfassungen
     scheduler.add_job(send_morning_summary, 'cron', hour=6, minute=40, args=[bot])
-    scheduler.add_job(send_evening_summary, 'cron', hour=21, minute=0, args=[bot])
+    scheduler.add_job(send_morning_summary, 'cron', hour=10, minute=0, args=[bot])
+    scheduler.add_job(send_morning_summary, 'cron', hour=10, minute=55, args=[bot])
+    scheduler.add_job(send_morning_summary, 'cron', hour=12, minute=10, args=[bot])
+    
+    # 🌙 Abendzusammenfassungen
+    scheduler.add_job(send_evening_summary, 'cron', hour=20, minute=15, args=[bot])
+    scheduler.add_job(send_evening_summary, 'cron', hour=21, minute=50, args=[bot])
+
     scheduler.start()
     print("✅ Scheduler gestartet.")
 
-# Application Setup
+# Bot aufbauen und Handler registrieren
 async def setup_application() -> Application:
     app = ApplicationBuilder().token(BOT_TOKEN).post_init(post_init).build()
     await app.bot.delete_webhook(drop_pending_updates=True)
+
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("termin", termin))
     app.add_handler(CommandHandler("todo", todo))
@@ -172,6 +330,7 @@ async def setup_application() -> Application:
     app.add_handler(CallbackQueryHandler(todo_button_handler, pattern="^(plan|verschiebe|done)_"))
     app.add_handler(CallbackQueryHandler(button_handler))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
+
     return app
 
 # Einstiegspunkt
