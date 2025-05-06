@@ -218,18 +218,18 @@ async def termin(update: Update, context: ContextTypes.DEFAULT_TYPE):
  
     tz = pytz.timezone("Europe/Berlin")
 
-for event in gpt_events:
-    start = parser.parse(event["start"]).replace(tzinfo=tz)
-    end = parser.parse(event["end"]).replace(tzinfo=tz)
-
-    parsed = {
-        "title": event["title"],
-        "start": start,
-        "end": end,
-        "location": event.get("location")
-    }
-    pending_events[user_id] = parsed
-    await show_confirmation(update, parsed)
+    for event in gpt_events:
+        start = parser.parse(event["start"]).replace(tzinfo=tz)
+        end = parser.parse(event["end"]).replace(tzinfo=tz)
+    
+        parsed = {
+            "title": event["title"],
+            "start": start,
+            "end": end,
+            "location": event.get("location")
+        }
+        pending_events[user_id] = parsed
+        await show_confirmation(update, parsed)
     
 async def show_confirmation(update: Update, parsed: dict):
     message = f"📅 **Geplanter Termin:**\n\nTitel: {parsed['title']}\nStart: {parsed['start'].strftime('%d.%m.%Y %H:%M')}\nEnde: {parsed['end'].strftime('%d.%m.%Y %H:%M')}"
