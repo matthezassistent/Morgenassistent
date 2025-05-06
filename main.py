@@ -54,11 +54,11 @@ from datetime import datetime
 import json
 
 async def gpt_parse_title_and_location(text: str) -> dict:
-    prompt = f"""Du bist ein Assistent für Kalendereinträge. Extrahiere aus dem folgenden Text nur:
+    prompt = f"""Extrahiere aus folgendem Text:
 - "title": kurzer Titel
-- "location": falls vorhanden (z. B. Ort, Plattform)
+- "location": falls ein Ort oder Plattform erkennbar ist
 
-Antworte im JSON-Format:
+Gib nur ein JSON-Objekt zurück:
 {{
   "title": "...",
   "location": "..." oder null
@@ -71,7 +71,7 @@ Text: {text}
         response = await openai_client.chat.completions.create(
             model="gpt-4",
             messages=[
-                {"role": "system", "content": "Antworte ausschließlich mit gültigem JSON."},
+                {"role": "system", "content": "Antworte ausschließlich mit gültigem JSON ohne Zusatztext."},
                 {"role": "user", "content": prompt}
             ],
             temperature=0.2,
@@ -183,12 +183,16 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 from dateparser.search import search_dates
 import pytz
 
+from dateparser.search import search_dates
+from datetime import timedelta
+import pytz
+
 async def termin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global pending_events
     user_id = update.effective_user.id
     text = update.message.text.replace("/termin", "").strip()
 
-    # Extrahiere Datum/Uhrzeit
+    # 1. Datum & Uhrzeit mit dateparser erkennen
     results = search_dates(text, languages=["de"])
     if not results:
         await update.message.reply_text("❌ Konnte kein Datum/Zeit erkennen.")
@@ -196,12 +200,16 @@ async def termin(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     dt = results[0][1]
     tz = pytz.timezone("Europe/Berlin")
-    dt = tz.localize(dt)
+    if dt.tzinfo is None:
+        dt = tz.localize(dt)
+    else:
+        dt = dt.astimezone(tz)
     end = dt + timedelta(hours=1)
 
-    # GPT holt Titel + Ort
+    # 2. Titel & Ort von GPT holen
     gpt_result = await gpt_parse_title_and_location(text)
 
+    # 3. Zusammenbauen
     parsed = {
         "title": gpt_result.get("title", "Unbenannter Termin"),
         "location": gpt_result.get("location"),
@@ -211,8 +219,7 @@ async def termin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     }
 
     pending_events[user_id] = parsed
-    await show_confirmation(update, parsed)
-    
+    await show_confirmation(update, parsed)    
 async def show_confirmation(update: Update, parsed: dict):
     message = parsed.get("confirmation_text") or (
         f"📅 Termin:\nTitel: {parsed['title']}\n"
