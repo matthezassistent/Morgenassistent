@@ -206,7 +206,7 @@ async def termin(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await show_confirmation(update, parsed)
 
 
-  async def show_confirmation(update: Update, parsed: dict):
+async def show_confirmation(update: Update, parsed: dict):
     message = f"📅 **Geplanter Termin:**\n\nTitel: {parsed['title']}\nStart: {parsed['start'].strftime('%d.%m.%Y %H:%M')}\nEnde: {parsed['end'].strftime('%d.%m.%Y %H:%M')}"
     if parsed.get("location"):
         message += f"\nOrt: {parsed['location']}"
