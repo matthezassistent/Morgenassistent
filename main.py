@@ -187,26 +187,33 @@ from dateparser.search import search_dates
 from datetime import timedelta
 import pytz
 
+def extract_datetime_strict(text: str) -> datetime | None:
+    tz = pytz.timezone("Europe/Berlin")
+    results = search_dates(text, languages=["de"])
+    if not results:
+        return None
+    for match_text, dt in results:
+        if re.search(r"\b\d{1,2}([:.h])\d{2}\b", match_text):  # z. B. 18:30, 18.30, 18h30
+            if dt.tzinfo is None:
+                return tz.localize(dt)
+            else:
+                return dt.astimezone(tz)
+    return None
+    
 async def termin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global pending_events
     user_id = update.effective_user.id
     text = update.message.text.replace("/termin", "").strip()
 
-    # 1. Datum & Uhrzeit mit dateparser erkennen
-    results = search_dates(text, languages=["de"])
-    if not results:
-        await update.message.reply_text("❌ Konnte kein Datum/Zeit erkennen.")
+    # 1. Sichere Datum/Uhrzeit-Erkennung
+    dt = extract_datetime_strict(text)
+    if not dt:
+        await update.message.reply_text("❌ Konnte keine gültige Uhrzeit wie 18:30 erkennen.")
         return
 
-    dt = results[0][1]
-    tz = pytz.timezone("Europe/Berlin")
-    if dt.tzinfo is None:
-        dt = tz.localize(dt)
-    else:
-        dt = dt.astimezone(tz)
     end = dt + timedelta(hours=1)
 
-    # 2. Titel & Ort von GPT holen
+    # 2. GPT für Titel/Ort
     gpt_result = await gpt_parse_title_and_location(text)
 
     # 3. Zusammenbauen
@@ -219,7 +226,8 @@ async def termin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     }
 
     pending_events[user_id] = parsed
-    await show_confirmation(update, parsed)    
+    await show_confirmation(update, parsed)
+    
 async def show_confirmation(update: Update, parsed: dict):
     message = parsed.get("confirmation_text") or (
         f"📅 Termin:\nTitel: {parsed['title']}\n"
