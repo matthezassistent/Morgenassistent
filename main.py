@@ -23,7 +23,7 @@ from dateparser.search import search_dates
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from googleapiclient.discovery import build
 from google.oauth2.credentials import Credentials
-from datetime import datetime
+from datetime import datetime, timedelta
 # ENV
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 CHAT_ID = 8011259706
@@ -140,18 +140,19 @@ def get_todoist_tasks():
     except:
         return "❌ Fehler beim Aufgabenlisten."
 
-def interpret_date_naturally(text: str) -> datetime.datetime | None:
+def interpret_date_naturally(text: str) -> datetime | None:
     text = text.lower()
-    now = datetime.datetime.now(pytz.timezone("Europe/Berlin"))
+    now = datetime.now(pytz.timezone("Europe/Berlin"))
+
     if "heute" in text:
         return now
     elif "übermorgen" in text:
-        return now + datetime.timedelta(days=2)
+        return now + timedelta(days=2)
     elif "morgen" in text:
-        return now + datetime.timedelta(days=1)
+        return now + timedelta(days=1)
+
     result = search_dates(text, languages=["de"])
     return result[0][1] if result else None
-
 def generate_event_summary(date):
     tz = pytz.timezone("Europe/Berlin")
     summary = []
