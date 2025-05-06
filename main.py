@@ -56,20 +56,26 @@ import json
 def find_time_and_date(text: str) -> datetime | None:
     tz = pytz.timezone("Europe/Berlin")
 
+    # 1. Suche explizite Uhrzeit (18:30, 18h30, 18.30)
+    time_match = re.search(r'\b(\d{1,2})[:h\.](\d{2})\b', text)
+    if not time_match:
+        return None
+
+    hour = int(time_match.group(1))
+    minute = int(time_match.group(2))
+
+    # 2. Suche Datum (z. B. „morgen“, „Freitag“)
     results = search_dates(text, languages=["de"])
     if not results:
         return None
 
-    # Suche erstes Ergebnis, das eine echte Uhrzeit enthält (z. B. 18:30, 18h30)
-    for match_text, dt in results:
-        if re.search(r'\b\d{1,2}([:.h])\d{2}\b', match_text):
-            if dt.tzinfo is None:
-                return tz.localize(dt)
-            else:
-                return dt.astimezone(tz)
+    # 3. Nimm das erste erkannte Datum (z. B. "heute", "morgen")
+    base_date = results[0][1].date()
 
-    return None
-        
+    # 4. Kombiniere beides zu einem datetime
+    dt = datetime.combine(base_date, datetime.min.time()).replace(hour=hour, minute=minute)
+    return tz.localize(dt)
+    
 def list_all_calendars():
     creds = load_credentials()
     service = build('calendar', 'v3', credentials=creds)
