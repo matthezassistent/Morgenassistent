@@ -217,17 +217,25 @@ async def termin(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
  
     for event in gpt_events:
-        start = parser.parse(event["start"]).astimezone(pytz.timezone("Europe/Berlin"))
-        end = parser.parse(event["end"]).astimezone(pytz.timezone("Europe/Berlin"))
-        parsed = {
-            "title": event["title"],
-            "start": start,
-            "end": end,
-            "location": event.get("location")
+    start_raw = parser.parse(event["start"])
+    if start_raw.tzinfo is None:
+        start_raw = pytz.utc.localize(start_raw)
+    start = start_raw.astimezone(pytz.timezone("Europe/Berlin"))
+
+    end_raw = parser.parse(event["end"])
+    if end_raw.tzinfo is None:
+        end_raw = pytz.utc.localize(end_raw)
+    end = end_raw.astimezone(pytz.timezone("Europe/Berlin"))
+
+    parsed = {
+        "title": event["title"],
+        "start": start,
+        "end": end,
+        "location": event.get("location")
     }
     pending_events[user_id] = parsed
     await show_confirmation(update, parsed)
-
+    
 async def show_confirmation(update: Update, parsed: dict):
     message = f"📅 **Geplanter Termin:**\n\nTitel: {parsed['title']}\nStart: {parsed['start'].strftime('%d.%m.%Y %H:%M')}\nEnde: {parsed['end'].strftime('%d.%m.%Y %H:%M')}"
     if parsed.get("location"):
