@@ -24,6 +24,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from googleapiclient.discovery import build
 from google.oauth2.credentials import Credentials
 from datetime import datetime, timedelta
+pending_events = {}
 # ENV
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 CHAT_ID = 8011259706
