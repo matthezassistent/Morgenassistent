@@ -195,8 +195,7 @@ async def send_evening_summary(bot: Bot):
     tomorrow = datetime.utcnow().astimezone(pytz.timezone("Europe/Berlin")) + timedelta(days=1)
     chunks = generate_event_summary(tomorrow)
     for chunk in chunks:
-        await bot.send_message(chat_id=CHAT_ID, 
-        text=chunk[:4000])
+        await bot.send_message(chat_id=CHAT_ID, text=chunk[:4000])
         pending_events = {}
 pending_tasks = {}
 
