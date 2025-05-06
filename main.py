@@ -6,7 +6,7 @@ import datetime
 import pytz
 import requests
 import asyncio
-from openai import OpenAI
+from openai import AsyncOpenAI  # <-- Geändert von OpenAI auf AsyncOpenAI
 
 from telegram import Update, Bot, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup
 from telegram.ext import (
@@ -44,9 +44,8 @@ def load_credentials():
     return creds
 
 import json
-from openai import OpenAI
 
-openai_client = OpenAI(api_key=OPENAI_API_KEY)
+openai_client = AsyncOpenAI(api_key=OPENAI_API_KEY)  # <-- Async Client korrekt initialisiert
 
 async def gpt_parse_events(text: str) -> list[dict]:
     prompt = f"""Extrahiere alle Kalendereinträge aus dem folgenden Text. Jeder Eintrag soll folgende Felder enthalten:
@@ -79,9 +78,6 @@ Gib ein JSON-Array zurück:
     except Exception as e:
         print("❌ GPT-Antwort konnte nicht geparsed werden:", e)
         return []
-
-
-
 
 
 def list_all_calendars():
