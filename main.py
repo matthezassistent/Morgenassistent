@@ -204,6 +204,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("👋 Hallo! Ich bin dein Assistent.")
 
 async def termin(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    global pending_events
     user_id = update.effective_user.id
     text = update.message.text.replace("/termin", "").strip()
 
