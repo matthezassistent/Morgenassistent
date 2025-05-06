@@ -60,7 +60,7 @@ async def gpt_parse_events(text: str) -> list[dict]:
 Extrahiere alle Termine aus dem folgenden Text und gib **nur ein gültiges JSON-Array** zurück. Jeder Termin soll folgendes Format haben:
 
 - title (kurzer Titel)
-- start (im Format YYYY-MM-DDTHH:MM)
+- start (im ISO 8601-Format mit Zeitzone, z. B. YYYY-MM-DDTHH:MM+02:00)
 - end (im Format YYYY-MM-DDTHH:MM)
 - location (optional oder null)
 
