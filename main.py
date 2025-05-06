@@ -208,7 +208,7 @@ async def termin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     end = dt + timedelta(hours=1)
 
     parsed = {
-        "title": "Neuer Termin",
+        "title": text.split(" um ")[0].strip().title(),  # alles vor „um“ als Titel
         "location": None,
         "start": dt,
         "end": end,
