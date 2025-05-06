@@ -60,12 +60,16 @@ async def gpt_parse_events(text: str) -> list[dict]:
 Extrahiere alle Termine aus dem folgenden Text und gib **nur ein gültiges JSON-Array** zurück. Jeder Termin soll folgendes Format haben:
 
 - title (kurzer Titel)
-- start (im ISO 8601-Format mit Zeitzone, z. B. YYYY-MM-DDTHH:MM+02:00)
-- end (im Format YYYY-MM-DDTHH:MM)
+- start (im ISO 8601-Format mit Zeitzone, z. B. 2025-10-10T16:00:00+02:00)
+- end (im selben Format wie start)
 - location (optional oder null)
 
-Wenn Uhrzeiten fehlen, verwende 13:00–14:00 als Standard.
-Wenn mehrere Uhrzeiten genannt werden, gib für jede einen eigenen Termin zurück.
+Wichtige Regeln:
+- Verwende **ausschließlich Uhrzeiten, die im Text explizit genannt werden**.
+- Beispiele: „13h“, „13:00“, „17h45“, „8:30“, „8h30“ → alle gültig.
+- Erfinde **keine** Uhrzeiten, verwende **keine** relativen Angaben wie „in einer Stunde“ oder „später“.
+- Wenn keine Uhrzeit vorhanden ist, verwende 13:00–14:00 als Standardzeitraum.
+- Gib den Output als gültiges JSON-Array zurück – **keine Kommentare, kein Text davor oder danach.**
 
 Beispiel:
 Text: "Test Treffen heute um 15 Uhr und um 17 Uhr"
@@ -73,14 +77,14 @@ Antwort:
 [
   {{
     "title": "Test Treffen",
-    "start": "{today}T15:00",
-    "end": "{today}T16:00",
+    "start": "{today}T15:00:00+02:00",
+    "end": "{today}T16:00:00+02:00",
     "location": null
   }},
   {{
     "title": "Test Treffen",
-    "start": "{today}T17:00",
-    "end": "{today}T18:00",
+    "start": "{today}T17:00:00+02:00",
+    "end": "{today}T18:00:00+02:00",
     "location": null
   }}
 ]
