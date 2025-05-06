@@ -47,17 +47,22 @@ import json
 
 openai_client = AsyncOpenAI(api_key=OPENAI_API_KEY)  # <-- Async Client korrekt initialisiert
 
+from datetime import datetime
+import json
+
 async def gpt_parse_events(text: str) -> list[dict]:
     today = datetime.now().strftime("%Y-%m-%d")
 
-    prompt = f"""Heute ist {today}. Du bist ein Terminparser. Extrahiere alle Kalendereinträge aus dem folgenden Text. Jeder Eintrag soll folgende Felder enthalten:
-- title (kurzer Titel des Termins)
+    prompt = f"""Heute ist {today}. Du bist ein Parser für Kalendereinträge.
+Extrahiere alle Termine aus dem folgenden Text und gib **nur ein gültiges JSON-Array** zurück. Jeder Termin soll folgendes Format haben:
+
+- title (kurzer Titel)
 - start (im Format YYYY-MM-DDTHH:MM)
 - end (im Format YYYY-MM-DDTHH:MM)
 - location (optional oder null)
 
 Wenn Uhrzeiten fehlen, verwende 13:00–14:00 als Standard.
-Wenn mehrere Termine im gleichen Satz erwähnt werden, gib sie einzeln aus.
+Wenn mehrere Uhrzeiten genannt werden, gib für jede einen eigenen Termin zurück.
 
 Beispiel:
 Text: "Test Treffen heute um 15 Uhr und um 17 Uhr"
@@ -83,10 +88,14 @@ Text: {text}
     try:
         response = await openai_client.chat.completions.create(
             model="gpt-4",
-            messages=[{"role": "user", "content": prompt}],
+            messages=[
+                {"role": "system", "content": "Antworte ausschließlich mit gültigem JSON. Kein Text oder Kommentare."},
+                {"role": "user", "content": prompt}
+            ],
             temperature=0.2,
         )
         content = response.choices[0].message.content.strip()
+        print("GPT-Rohantwort:", content)  # Zum Debuggen in Logs
         return json.loads(content)
     except Exception as e:
         print("❌ GPT-Antwort konnte nicht geparsed werden:", e)
