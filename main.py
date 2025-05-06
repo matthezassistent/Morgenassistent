@@ -53,45 +53,16 @@ openai_client = AsyncOpenAI(api_key=OPENAI_API_KEY)  # <-- Async Client korrekt 
 from datetime import datetime
 import json
 
-async def gpt_parse_events(text: str) -> list[dict]:
-    from datetime import datetime
-    today = datetime.now().strftime("%Y-%m-%d")
+async def gpt_parse_title_and_location(text: str) -> dict:
+    prompt = f"""Du bist ein Assistent für Kalendereinträge. Extrahiere aus dem folgenden Text nur:
+- "title": kurzer Titel
+- "location": falls vorhanden (z. B. Ort, Plattform)
 
-    prompt = f"""Heute ist {today}. Du bist ein strenger Parser für Kalendereinträge.
-
-Extrahiere alle Termine aus dem folgenden Text und gib nur ein gültiges JSON-Array zurück. Jeder Termin hat folgende Felder:
-
-- title (kurzer Titel)
-- start (im ISO 8601-Format mit Zeitzone, z. B. 2025-10-10T13:00:00+02:00)
-- end (ebenfalls ISO mit Zeitzone, meist +1h)
-- location (optional oder null)
-- confirmation_text (ein kurzer deutscher Satz wie „Konzert am 10.10.2025 um 18:30 Uhr“)
-
-Regeln:
-- Verwende ausschließlich Uhrzeiten, die im Text wörtlich vorkommen (z. B. „13:00“, „14h30“, „8h45“).
-- Erfinde keine Zeiten. Keine relativen Angaben wie „später“ oder „bald“.
-- Wenn keine Uhrzeit im Text steht, verwende 13:00–14:00 als Standard.
-- Alle Zeiten gelten für Europe/Berlin.
-
-Beispiel:
-Text: "Test Treffen heute um 15 Uhr und um 17 Uhr"
-Antwort:
-[
-  {{
-    "title": "Test Treffen",
-    "start": "{today}T15:00:00+02:00",
-    "end": "{today}T16:00:00+02:00",
-    "location": null,
-    "confirmation_text": "Test Treffen am {today} um 15:00 Uhr"
-  }},
-  {{
-    "title": "Test Treffen",
-    "start": "{today}T17:00:00+02:00",
-    "end": "{today}T18:00:00+02:00",
-    "location": null,
-    "confirmation_text": "Test Treffen am {today} um 17:00 Uhr"
-  }}
-]
+Antworte im JSON-Format:
+{{
+  "title": "...",
+  "location": "..." oder null
+}}
 
 Text: {text}
 """
@@ -100,17 +71,15 @@ Text: {text}
         response = await openai_client.chat.completions.create(
             model="gpt-4",
             messages=[
-                {"role": "system", "content": "Antworte ausschließlich mit gültigem JSON. Kein Text oder Kommentare."},
+                {"role": "system", "content": "Antworte ausschließlich mit gültigem JSON."},
                 {"role": "user", "content": prompt}
             ],
             temperature=0.2,
         )
-        content = response.choices[0].message.content.strip()
-        print("GPT-Rohantwort:", content)
-        return json.loads(content)
+        return json.loads(response.choices[0].message.content.strip())
     except Exception as e:
-        print("❌ GPT-Antwort konnte nicht geparsed werden:", e)
-        return []
+        print("GPT-Fehler:", e)
+        return {"title": "Unbenannter Termin", "location": None}
         
 def list_all_calendars():
     creds = load_credentials()
@@ -211,32 +180,38 @@ pending_tasks = {}
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("👋 Hallo! Ich bin dein Assistent.")
 
+from dateparser.search import search_dates
+import pytz
+
 async def termin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global pending_events
     user_id = update.effective_user.id
     text = update.message.text.replace("/termin", "").strip()
 
-    # Nur GPT verwenden
-    gpt_events = await gpt_parse_events(text)
-    if not gpt_events:
-        await update.message.reply_text("❌ Konnte keine Termine erkennen.")
+    # Extrahiere Datum/Uhrzeit
+    results = search_dates(text, languages=["de"])
+    if not results:
+        await update.message.reply_text("❌ Konnte kein Datum/Zeit erkennen.")
         return
 
- 
+    dt = results[0][1]
     tz = pytz.timezone("Europe/Berlin")
+    dt = tz.localize(dt)
+    end = dt + timedelta(hours=1)
 
-    for event in gpt_events:
-        start = parser.parse(event["start"]).replace(tzinfo=tz)
-        end = parser.parse(event["end"]).replace(tzinfo=tz)
-    
-        parsed = {
-            "title": event["title"],
-            "start": start,
-            "end": end,
-            "location": event.get("location")
-        }
-        pending_events[user_id] = parsed
-        await show_confirmation(update, parsed)
+    # GPT holt Titel + Ort
+    gpt_result = await gpt_parse_title_and_location(text)
+
+    parsed = {
+        "title": gpt_result.get("title", "Unbenannter Termin"),
+        "location": gpt_result.get("location"),
+        "start": dt,
+        "end": end,
+        "confirmation_text": f"{gpt_result.get('title', 'Termin')} am {dt.strftime('%d.%m.%Y')} um {dt.strftime('%H:%M')} Uhr"
+    }
+
+    pending_events[user_id] = parsed
+    await show_confirmation(update, parsed)
     
 async def show_confirmation(update: Update, parsed: dict):
     message = parsed.get("confirmation_text") or (
