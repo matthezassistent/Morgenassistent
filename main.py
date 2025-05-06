@@ -48,38 +48,51 @@ import json
 openai_client = AsyncOpenAI(api_key=OPENAI_API_KEY)  # <-- Async Client korrekt initialisiert
 
 async def gpt_parse_events(text: str) -> list[dict]:
-    prompt = f"""Extrahiere alle Kalendereinträge aus dem folgenden Text. Jeder Eintrag soll folgende Felder enthalten:
-- title
+    today = datetime.now().strftime("%Y-%m-%d")
+
+    prompt = f"""Heute ist {today}. Du bist ein Terminparser. Extrahiere alle Kalendereinträge aus dem folgenden Text. Jeder Eintrag soll folgende Felder enthalten:
+- title (kurzer Titel des Termins)
 - start (im Format YYYY-MM-DDTHH:MM)
 - end (im Format YYYY-MM-DDTHH:MM)
 - location (optional oder null)
 
 Wenn Uhrzeiten fehlen, verwende 13:00–14:00 als Standard.
+Wenn mehrere Termine im gleichen Satz erwähnt werden, gib sie einzeln aus.
 
-Text: {text}
-
-Gib ein JSON-Array zurück:
+Beispiel:
+Text: "Test Treffen heute um 15 Uhr und um 17 Uhr"
+Antwort:
 [
   {{
-    "title": "Termin mit Max",
-    "start": "2025-05-09T13:00",
-    "end": "2025-05-09T14:00",
-    "location": "Musikschule"
+    "title": "Test Treffen",
+    "start": "{today}T15:00",
+    "end": "{today}T16:00",
+    "location": null
+  }},
+  {{
+    "title": "Test Treffen",
+    "start": "{today}T17:00",
+    "end": "{today}T18:00",
+    "location": null
   }}
-]"""
+]
 
-    response = await openai_client.chat.completions.create(
-        model="gpt-4",
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0.2,
-    )
+Text: {text}
+"""
+
     try:
-        return json.loads(response.choices[0].message.content)
+        response = await openai_client.chat.completions.create(
+            model="gpt-4",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.2,
+        )
+        content = response.choices[0].message.content.strip()
+        return json.loads(content)
     except Exception as e:
         print("❌ GPT-Antwort konnte nicht geparsed werden:", e)
         return []
 
-
+        
 def list_all_calendars():
     creds = load_credentials()
     service = build('calendar', 'v3', credentials=creds)
