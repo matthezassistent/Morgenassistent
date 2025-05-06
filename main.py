@@ -54,22 +54,24 @@ from datetime import datetime
 import json
 
 async def gpt_parse_events(text: str) -> list[dict]:
+    from datetime import datetime
     today = datetime.now().strftime("%Y-%m-%d")
 
-    prompt = f"""Heute ist {today}. Du bist ein Parser für Kalendereinträge.
-Extrahiere alle Termine aus dem folgenden Text und gib **nur ein gültiges JSON-Array** zurück. Jeder Termin soll folgendes Format haben:
+    prompt = f"""Heute ist {today}. Du bist ein strenger Parser für Kalendereinträge.
+
+Extrahiere alle Termine aus dem folgenden Text und gib nur ein gültiges JSON-Array zurück. Jeder Termin hat folgende Felder:
 
 - title (kurzer Titel)
-- start (im ISO 8601-Format mit Zeitzone, z. B. 2025-10-10T16:00:00+02:00)
-- end (im selben Format wie start)
+- start (im ISO 8601-Format mit Zeitzone, z. B. 2025-10-10T13:00:00+02:00)
+- end (ebenfalls ISO mit Zeitzone, meist +1h)
 - location (optional oder null)
+- confirmation_text (ein kurzer deutscher Satz wie „Konzert am 10.10.2025 um 18:30 Uhr“)
 
-Wichtige Regeln:
-- Verwende **ausschließlich Uhrzeiten, die im Text explizit genannt werden**.
-- Beispiele: „13h“, „13:00“, „17h45“, „8:30“, „8h30“ → alle gültig.
-- Erfinde **keine** Uhrzeiten, verwende **keine** relativen Angaben wie „in einer Stunde“ oder „später“.
-- Wenn keine Uhrzeit vorhanden ist, verwende 13:00–14:00 als Standardzeitraum.
-- Gib den Output als gültiges JSON-Array zurück – **keine Kommentare, kein Text davor oder danach.**
+Regeln:
+- Verwende ausschließlich Uhrzeiten, die im Text wörtlich vorkommen (z. B. „13:00“, „14h30“, „8h45“).
+- Erfinde keine Zeiten. Keine relativen Angaben wie „später“ oder „bald“.
+- Wenn keine Uhrzeit im Text steht, verwende 13:00–14:00 als Standard.
+- Alle Zeiten gelten für Europe/Berlin.
 
 Beispiel:
 Text: "Test Treffen heute um 15 Uhr und um 17 Uhr"
@@ -79,13 +81,15 @@ Antwort:
     "title": "Test Treffen",
     "start": "{today}T15:00:00+02:00",
     "end": "{today}T16:00:00+02:00",
-    "location": null
+    "location": null,
+    "confirmation_text": "Test Treffen am {today} um 15:00 Uhr"
   }},
   {{
     "title": "Test Treffen",
     "start": "{today}T17:00:00+02:00",
     "end": "{today}T18:00:00+02:00",
-    "location": null
+    "location": null,
+    "confirmation_text": "Test Treffen am {today} um 17:00 Uhr"
   }}
 ]
 
@@ -102,12 +106,11 @@ Text: {text}
             temperature=0.2,
         )
         content = response.choices[0].message.content.strip()
-        print("GPT-Rohantwort:", content)  # Zum Debuggen in Logs
+        print("GPT-Rohantwort:", content)
         return json.loads(content)
     except Exception as e:
         print("❌ GPT-Antwort konnte nicht geparsed werden:", e)
         return []
-
         
 def list_all_calendars():
     creds = load_credentials()
@@ -236,16 +239,18 @@ async def termin(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await show_confirmation(update, parsed)
     
 async def show_confirmation(update: Update, parsed: dict):
-    message = f"📅 **Geplanter Termin:**\n\nTitel: {parsed['title']}\nStart: {parsed['start'].strftime('%d.%m.%Y %H:%M')}\nEnde: {parsed['end'].strftime('%d.%m.%Y %H:%M')}"
-    if parsed.get("location"):
-        message += f"\nOrt: {parsed['location']}"
+    message = parsed.get("confirmation_text") or (
+        f"📅 Termin:\nTitel: {parsed['title']}\n"
+        f"Start: {parsed['start'].strftime('%d.%m.%Y %H:%M')}\n"
+        f"Ende: {parsed['end'].strftime('%d.%m.%Y %H:%M')}"
+    )
+
     buttons = [[
         InlineKeyboardButton("✅ Ja, eintragen", callback_data="confirm"),
         InlineKeyboardButton("❌ Nein", callback_data="cancel")
     ]]
     reply_markup = InlineKeyboardMarkup(buttons)
     await update.message.reply_text(message, reply_markup=reply_markup, parse_mode="Markdown")
-
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
