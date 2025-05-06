@@ -43,6 +43,47 @@ def load_credentials():
         creds = pickle.load(token_file)
     return creds
 
+import json
+from openai import OpenAI
+
+openai_client = OpenAI(api_key=OPENAI_API_KEY)
+
+async def gpt_parse_events(text: str) -> list[dict]:
+    prompt = f"""Extrahiere alle Kalendereinträge aus dem folgenden Text. Jeder Eintrag soll folgende Felder enthalten:
+- title
+- start (im Format YYYY-MM-DDTHH:MM)
+- end (im Format YYYY-MM-DDTHH:MM)
+- location (optional oder null)
+
+Wenn Uhrzeiten fehlen, verwende 13:00–14:00 als Standard.
+
+Text: {text}
+
+Gib ein JSON-Array zurück:
+[
+  {{
+    "title": "Termin mit Max",
+    "start": "2025-05-09T13:00",
+    "end": "2025-05-09T14:00",
+    "location": "Musikschule"
+  }}
+]"""
+
+    response = await openai_client.chat.completions.create(
+        model="gpt-4",
+        messages=[{"role": "user", "content": prompt}],
+        temperature=0.2,
+    )
+    try:
+        return json.loads(response.choices[0].message.content)
+    except Exception as e:
+        print("❌ GPT-Antwort konnte nicht geparsed werden:", e)
+        return []
+
+
+
+
+
 def list_all_calendars():
     creds = load_credentials()
     service = build('calendar', 'v3', credentials=creds)
@@ -142,46 +183,30 @@ pending_tasks = {}
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("👋 Hallo! Ich bin dein Assistent.")
 
-async def parse_event(text):
-    try:
-        found_dates = search_dates(text, languages=['de'])
-        if not found_dates:
-            return None
-        start_dt = found_dates[0][1]
-        if "-" in text:
-            times = text.split("-")
-            try:
-                start_time = parser.parse(times[0], fuzzy=True)
-                end_time = parser.parse(times[1], fuzzy=True)
-                start_dt = start_dt.replace(hour=start_time.hour, minute=start_time.minute)
-                end_dt = start_dt.replace(hour=end_time.hour, minute=end_time.minute)
-            except:
-                end_dt = start_dt + datetime.timedelta(hours=1)
-        else:
-            end_dt = start_dt + datetime.timedelta(hours=1)
-        ort = None
-        if " in " in text:
-            ort = text.split(" in ")[-1]
-        elif " bei " in text:
-            ort = text.split(" bei ")[-1]
-        title = text.split(" findet")[0] if " findet" in text else text.split(" am")[0]
-        return {
-            "title": title.strip(),
-            "start": start_dt,
-            "end": end_dt,
-            "location": ort.strip() if ort else None
-        }
-    except:
-        return None
-
 async def termin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     text = update.message.text.replace("/termin", "").strip()
-    parsed = await parse_event(text)
-    if not parsed:
-        await update.message.reply_text("❌ Konnte den Termin nicht verstehen.")
+
+    # Nur GPT verwenden
+    gpt_events = await gpt_parse_events(text)
+    if not gpt_events:
+        await update.message.reply_text("❌ Konnte keine Termine erkennen.")
         return
-    pending_events[user_id] = parsed
+
+    for event in gpt_events:
+        start = datetime.datetime.fromisoformat(event["start"]).astimezone(pytz.timezone("Europe/Berlin"))
+        end = datetime.datetime.fromisoformat(event["end"]).astimezone(pytz.timezone("Europe/Berlin"))
+        parsed = {
+            "title": event["title"],
+            "start": start,
+            "end": end,
+            "location": event.get("location")
+        }
+        pending_events[user_id] = parsed
+        await show_confirmation(update, parsed)
+
+
+  async def show_confirmation(update: Update, parsed: dict):
     message = f"📅 **Geplanter Termin:**\n\nTitel: {parsed['title']}\nStart: {parsed['start'].strftime('%d.%m.%Y %H:%M')}\nEnde: {parsed['end'].strftime('%d.%m.%Y %H:%M')}"
     if parsed.get("location"):
         message += f"\nOrt: {parsed['location']}"
@@ -191,6 +216,7 @@ async def termin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]]
     reply_markup = InlineKeyboardMarkup(buttons)
     await update.message.reply_text(message, reply_markup=reply_markup, parse_mode="Markdown")
+
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
