@@ -184,19 +184,17 @@ def generate_event_summary(date):
 
 async def send_morning_summary(bot: Bot):
     print("⏰ Sende Morgenzusammenfassung…")
-    today = datetime.datetime.utcnow().astimezone(pytz.timezone("Europe/Berlin"))
+    today = datetime.utcnow().astimezone(pytz.timezone("Europe/Berlin"))
     chunks = generate_event_summary(today)
     for chunk in chunks:
         await bot.send_message(chat_id=CHAT_ID, text=chunk[:4000])
 
 async def send_evening_summary(bot: Bot):
     print("🌙 Sende Abendzusammenfassung…")
-    tomorrow = datetime.datetime.utcnow().astimezone(pytz.timezone("Europe/Berlin")) + datetime.timedelta(days=1)
+    tomorrow = datetime.utcnow().astimezone(pytz.timezone("Europe/Berlin")) + timedelta(days=1)
     chunks = generate_event_summary(tomorrow)
     for chunk in chunks:
-        await bot.send_message(chat_id=CHAT_ID, text=chunk[:4000])
-
-pending_events = {}
+        await bot.send_message(chat_id=CHAT_ID, text=chunk[:4000])pending_events = {}
 pending_tasks = {}
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -213,8 +211,8 @@ async def termin(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     for event in gpt_events:
-        start = datetime.datetime.fromisoformat(event["start"]).astimezone(pytz.timezone("Europe/Berlin"))
-        end = datetime.datetime.fromisoformat(event["end"]).astimezone(pytz.timezone("Europe/Berlin"))
+        start = datetime.fromisoformat(event["start"]).astimezone(pytz.timezone("Europe/Berlin"))
+        end = datetime.fromisoformat(event["end"]).astimezone(pytz.timezone("Europe/Berlin"))
         parsed = {
             "title": event["title"],
             "start": start,
@@ -292,7 +290,7 @@ async def todo_button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
         await query.edit_message_text(f"Wann soll ich '{task['content']}' einplanen? (z.B. 14:00)")
     elif action == "verschiebe":
         task_id = task["id"]
-        new_due = (datetime.datetime.now() + datetime.timedelta(days=1)).strftime("%Y-%m-%d")
+        new_due = (datetime.now() + datetime.timedelta(days=1)).strftime("%Y-%m-%d")
         requests.post(f"https://api.todoist.com/rest/v2/tasks/{task_id}",
                       headers={"Authorization": f"Bearer {TODOIST_API_TOKEN}"},
                       json={"due_date": new_due})
@@ -307,7 +305,7 @@ async def handle_startzeit(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.strip()
     try:
         time_parsed = parser.parse(text, fuzzy=True)
-        now = datetime.datetime.now(pytz.timezone("Europe/Berlin"))
+        now = datetime.now(pytz.timezone("Europe/Berlin"))
         start = now.replace(hour=time_parsed.hour, minute=time_parsed.minute, second=0, microsecond=0)
         end = start + datetime.timedelta(minutes=60)
         task = context.user_data.pop("plan_task")
