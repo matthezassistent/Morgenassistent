@@ -216,14 +216,14 @@ async def termin(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
  
-for event in gpt_events:
-    start = parser.parse(event["start"]).astimezone(pytz.timezone("Europe/Berlin"))
-    end = parser.parse(event["end"]).astimezone(pytz.timezone("Europe/Berlin"))
-    parsed = {
-        "title": event["title"],
-        "start": start,
-        "end": end,
-        "location": event.get("location")
+    for event in gpt_events:
+        start = parser.parse(event["start"]).astimezone(pytz.timezone("Europe/Berlin"))
+        end = parser.parse(event["end"]).astimezone(pytz.timezone("Europe/Berlin"))
+        parsed = {
+            "title": event["title"],
+            "start": start,
+            "end": end,
+            "location": event.get("location")
     }
     pending_events[user_id] = parsed
     await show_confirmation(update, parsed)
