@@ -53,33 +53,25 @@ openai_client = AsyncOpenAI(api_key=OPENAI_API_KEY)  # <-- Async Client korrekt 
 from datetime import datetime
 import json
 
-async def gpt_parse_title_and_location(text: str) -> dict:
-    prompt = f"""Extrahiere aus folgendem Text:
-- "title": kurzer Titel
-- "location": falls ein Ort oder Plattform erkennbar ist
+def find_time_and_date(text: str) -> datetime | None:
+    tz = pytz.timezone("Europe/Berlin")
 
-Gib nur ein JSON-Objekt zurück:
-{{
-  "title": "...",
-  "location": "..." oder null
-}}
+    # Uhrzeit im Format 18:30, 18h30, 18.30
+    time_match = re.search(r'\b(\d{1,2})[:h\.](\d{2})\b', text)
+    if not time_match:
+        return None
 
-Text: {text}
-"""
+    hour, minute = int(time_match.group(1)), int(time_match.group(2))
 
-    try:
-        response = await openai_client.chat.completions.create(
-            model="gpt-4",
-            messages=[
-                {"role": "system", "content": "Antworte ausschließlich mit gültigem JSON ohne Zusatztext."},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.2,
-        )
-        return json.loads(response.choices[0].message.content.strip())
-    except Exception as e:
-        print("GPT-Fehler:", e)
-        return {"title": "Unbenannter Termin", "location": None}
+    # Datum über dateparser suchen
+    result = search_dates(text, languages=["de"])
+    if not result:
+        return None
+
+    base_date = result[0][1].date()
+    dt = datetime.combine(base_date, datetime.min.time()).replace(hour=hour, minute=minute)
+    return tz.localize(dt)
+
         
 def list_all_calendars():
     creds = load_credentials()
@@ -205,24 +197,19 @@ async def termin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     text = update.message.text.replace("/termin", "").strip()
 
-    # 1. Sichere Datum/Uhrzeit-Erkennung
-    dt = extract_datetime_strict(text)
+    dt = find_time_and_date(text)
     if not dt:
-        await update.message.reply_text("❌ Konnte keine gültige Uhrzeit wie 18:30 erkennen.")
+        await update.message.reply_text("❌ Konnte keine klare Uhrzeit wie 18:30 erkennen.")
         return
 
     end = dt + timedelta(hours=1)
 
-    # 2. GPT für Titel/Ort
-    gpt_result = await gpt_parse_title_and_location(text)
-
-    # 3. Zusammenbauen
     parsed = {
-        "title": gpt_result.get("title", "Unbenannter Termin"),
-        "location": gpt_result.get("location"),
+        "title": "Neuer Termin",
+        "location": None,
         "start": dt,
         "end": end,
-        "confirmation_text": f"{gpt_result.get('title', 'Termin')} am {dt.strftime('%d.%m.%Y')} um {dt.strftime('%H:%M')} Uhr"
+        "confirmation_text": f"Neuer Termin am {dt.strftime('%d.%m.%Y')} um {dt.strftime('%H:%M')} Uhr"
     }
 
     pending_events[user_id] = parsed
