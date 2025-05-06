@@ -24,6 +24,8 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from googleapiclient.discovery import build
 from google.oauth2.credentials import Credentials
 from datetime import datetime, timedelta
+from dateutil import parser  # ganz oben importieren, falls noch nicht geschehen
+
 pending_events = {}
 # ENV
 BOT_TOKEN = os.getenv("BOT_TOKEN")
@@ -213,18 +215,18 @@ async def termin(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ Konnte keine Termine erkennen.")
         return
 
-    for event in gpt_events:
-        start = datetime.fromisoformat(event["start"]).astimezone(pytz.timezone("Europe/Berlin"))
-        end = datetime.fromisoformat(event["end"]).astimezone(pytz.timezone("Europe/Berlin"))
-        parsed = {
-            "title": event["title"],
-            "start": start,
-            "end": end,
-            "location": event.get("location")
-        }
-        pending_events[user_id] = parsed
-        await show_confirmation(update, parsed)
-
+ 
+for event in gpt_events:
+    start = parser.parse(event["start"]).astimezone(pytz.timezone("Europe/Berlin"))
+    end = parser.parse(event["end"]).astimezone(pytz.timezone("Europe/Berlin"))
+    parsed = {
+        "title": event["title"],
+        "start": start,
+        "end": end,
+        "location": event.get("location")
+    }
+    pending_events[user_id] = parsed
+    await show_confirmation(update, parsed)
 
 async def show_confirmation(update: Update, parsed: dict):
     message = f"📅 **Geplanter Termin:**\n\nTitel: {parsed['title']}\nStart: {parsed['start'].strftime('%d.%m.%Y %H:%M')}\nEnde: {parsed['end'].strftime('%d.%m.%Y %H:%M')}"
