@@ -383,7 +383,7 @@ if __name__ == "__main__":
     import asyncio
 
     async def runner():
-        print(\"✅ Bot gestartet – warte auf Nachrichten...\")
+        print("✅ Bot gestartet – warte auf Nachrichten...")
         app = await setup_application()
         await app.initialize()
         await app.start()
