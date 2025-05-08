@@ -379,11 +379,15 @@ async def setup_application() -> Application:
     return app
 
 
-async def main():
-    print("✅ Bot wird gestartet mit polling...")
-    app = await setup_application()
-    await app.run_polling()
-
 if __name__ == "__main__":
     import asyncio
-    asyncio.run(main())
+
+    async def runner():
+        print("✅ Bot wird gestartet (Render-kompatibel)...")
+        app = await setup_application()
+        await app.initialize()
+        await app.start()
+        await asyncio.Event().wait()  # blockiert dauerhaft
+
+    asyncio.get_event_loop().create_task(runner())
+    asyncio.get_event_loop().run_forever()
