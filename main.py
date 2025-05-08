@@ -337,12 +337,19 @@ async def setup_application() -> Application:
     return app
 
 if __name__ == "__main__":
-    async def runner():
+    import asyncio
+
+    async def run_bot():
         print("✅ Bot wird gestartet (Render-kompatibel)...")
-        app = await setup_application()
-        await app.initialize()
-        await app.start()
+        application = await setup_application()
+        print("✅ Application aufgebaut.")
+        await application.initialize()
+        print("✅ Initialisiert.")
+        await application.start()
+        print("✅ Gestartet – warte jetzt dauerhaft.")
         await asyncio.Event().wait()
 
-    asyncio.get_event_loop().create_task(runner())
-    asyncio.get_event_loop().run_forever()
+    try:
+        asyncio.run(run_bot())
+    except Exception as e:
+        print(f"❌ Fehler beim Start: {e}")
