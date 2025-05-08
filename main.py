@@ -353,7 +353,9 @@ async def morning_job(context: ContextTypes.DEFAULT_TYPE):
             })()
     update = FakeUpdate(context.bot, chat_id)
     await mail_command(update, context)
-
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    print("📥 /start empfangen von:", update.effective_user.username)
+    await update.message.reply_text("👋 Hallo! Ich bin dein Assistent.")
 async def post_init(application):
     await asyncio.sleep(1)
     bot = application.bot
