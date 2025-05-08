@@ -7,6 +7,8 @@ import datetime
 import pytz
 import requests
 import asyncio
+
+print("🚀 Start main.py")
 from openai import AsyncOpenAI
 
 from telegram import Update, Bot, InlineKeyboardButton, InlineKeyboardMarkup
@@ -35,6 +37,7 @@ pending_tasks = {}
 
 # ENV
 BOT_TOKEN = os.getenv("BOT_TOKEN")
+print("BOT_TOKEN geladen:", BOT_TOKEN[:10] if BOT_TOKEN else "❌ NICHT GESETZT")
 CHAT_ID = 8011259706
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 TODOIST_API_TOKEN = os.getenv("TODOIST_API_TOKEN")
@@ -334,25 +337,49 @@ async def post_init(application):
     print("✅ Scheduler gestartet.")
 
 async def setup_application() -> Application:
+    print("🔧 setup_application gestartet")
+    
     app = Application.builder().token(BOT_TOKEN).post_init(post_init).build()
+    print("🧼 Webhook löschen...")
     await app.bot.delete_webhook(drop_pending_updates=True)
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("termin", termin))
-    app.add_handler(CommandHandler("todo", todo))
-    app.add_handler(CommandHandler("frage", frage))
-    app.add_handler(CommandHandler("mail", mail_command))
-    app.add_handler(CallbackQueryHandler(mail_callback_handler, pattern="^(archive|defer):"))
-    app.add_handler(CallbackQueryHandler(todo_button_handler, pattern="^(plan|verschiebe|done)_"))
-    app.add_handler(CallbackQueryHandler(button_handler))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
-    return app
 
+    print("🧩 Handler registrieren...")
+    app.add_handler(CommandHandler("start", start))
+    print("✅ /start registriert")
+
+    app.add_handler(CommandHandler("termin", termin))
+    print("✅ /termin registriert")
+
+    app.add_handler(CommandHandler("todo", todo))
+    print("✅ /todo registriert")
+
+    app.add_handler(CommandHandler("frage", frage))
+    print("✅ /frage registriert")
+
+    app.add_handler(CommandHandler("mail", mail_command))
+    print("✅ /mail registriert")
+
+    app.add_handler(CallbackQueryHandler(mail_callback_handler, pattern="^(archive|defer):"))
+    print("✅ Callback mail registriert")
+
+    app.add_handler(CallbackQueryHandler(todo_button_handler, pattern="^(plan|verschiebe|done)_"))
+    print("✅ Callback todo registriert")
+
+    app.add_handler(CallbackQueryHandler(button_handler))
+    print("✅ Callback confirm/cancel registriert")
+
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
+    print("✅ MessageHandler registriert")
+
+    return app
 if __name__ == "__main__":
     import asyncio
 
     loop = asyncio.get_event_loop()
 
     async def main():
+        
+        
         print("✅ Bot wird gestartet (Render-kompatibel)...")
         app = await setup_application()
         print("✅ Application aufgebaut.")
