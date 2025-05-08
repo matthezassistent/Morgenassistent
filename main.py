@@ -202,17 +202,12 @@ async def setup_application():
     return app
 
 if __name__ == "__main__":
-    import asyncio
+    from telegram.ext import ApplicationBuilder
 
-    async def run():
-        print("✅ Bot wird gestartet...")
-        app = await setup_application()
-        await app.initialize()
-        await app.start()
-        print("✅ Läuft.")
-        await asyncio.Event().wait()
+    print("✅ Starte Bot mit run_polling()...")
 
-    try:
-        asyncio.run(run())
-    except RuntimeError as e:
-        print("❌ Fehler beim Start:", e)
+    app = ApplicationBuilder().token(BOT_TOKEN).build()
+    app.add_handler(CommandHandler("start", start))
+    # weitere Handler ...
+
+    app.run_polling()
