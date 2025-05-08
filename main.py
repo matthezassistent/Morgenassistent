@@ -37,9 +37,9 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 TODOIST_API_TOKEN = os.getenv("TODOIST_API_TOKEN")
 PORT = int(os.environ.get("PORT", 8443))
 
-application = ApplicationBuilder().token(BOT_TOKEN).build()
-application.add_handler(CommandHandler("mail", mail_command))
-application.add_handler(CallbackQueryHandler(mail_callback_handler, pattern="^(archive|defer):"))
+# application = ApplicationBuilder().token(BOT_TOKEN).build()
+# application.add_handler(CommandHandler("mail", mail_command))
+# application.add_handler(CallbackQueryHandler(mail_callback_handler, pattern="^(archive|defer):"))
 
 if not os.path.exists("token.pkl"):
     encoded_token = os.getenv("TOKEN_PKL_BASE64")
