@@ -353,13 +353,13 @@ if __name__ == "__main__":
     loop = asyncio.get_event_loop()
 
     async def main():
-        print("âœ… Bot wird gestartet (Render-kompatibel)...")
-        # Hier wÃ¤re: app = await setup_application()
-        print("âœ… Application aufgebaut.")
-        # await app.initialize()
-        print("âœ… Initialisiert.")
-        # await app.start()
-        print("âœ… Gestartet â€“ warte jetzt dauerhaft.")
+        print("✅ Bot wird gestartet (Render-kompatibel)...")
+        app = await setup_application()
+        print("✅ Application aufgebaut.")
+        await app.initialize()
+        print("✅ Initialisiert.")
+        await app.start()
+        print("✅ Gestartet – warte jetzt dauerhaft.")
         await asyncio.Event().wait()
 
     loop.create_task(main())
