@@ -28,6 +28,8 @@ from email_bot_handlers import mail_command, mail_callback_handler
 
 from datetime import datetime, timedelta
 
+print("🚀 main.py wird ausgeführt...")
+
 # Globale Variablen
 pending_events = {}
 pending_tasks = {}
