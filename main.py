@@ -25,8 +25,8 @@ from apscheduler.triggers.cron import CronTrigger
 from googleapiclient.discovery import build
 from google.oauth2.credentials import Credentials
 from email_bot_handlers import mail_command, mail_callback_handler
-from your_calendar_module import load_credentials  # Anpassen an deine Struktur
-from your_utils import interpret_date_naturally, generate_event_summary  # Anpassen an deine Struktur
+# from your_calendar_module import load_credentials  # Anpassen an deine Struktur
+# from your_utils import interpret_date_naturally, generate_event_summary  # Anpassen an deine Struktur
 
 pending_events = {}
 
