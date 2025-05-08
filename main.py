@@ -305,7 +305,6 @@ async def todo_button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
                       headers={"Authorization": f"Bearer {TODOIST_API_TOKEN}"})
         await query.edit_message_text("✔️ Aufgabe als erledigt markiert.")
 
-nest_asyncio.apply()
 
 async def handle_startzeit(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.strip()
