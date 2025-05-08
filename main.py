@@ -6,7 +6,7 @@ import datetime
 import pytz
 import requests
 import asyncio
-from openai import AsyncOpenAI  # <-- Geändert von OpenAI auf AsyncOpenAI
+from openai import AsyncOpenAI
 
 from telegram import Update, Bot, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup
 from telegram.ext import (
@@ -21,12 +21,18 @@ from telegram.ext import (
 from dateutil import parser
 from dateparser.search import search_dates
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
 from googleapiclient.discovery import build
 from google.oauth2.credentials import Credentials
-from datetime import datetime, timedelta
-from dateutil import parser  # ganz oben importieren, falls noch nicht geschehen
+from email_bot_handlers import mail_command, mail_callback_handler
+from your_calendar_module import load_credentials  # Anpassen an deine Struktur
+from your_utils import interpret_date_naturally, generate_event_summary  # Anpassen an deine Struktur
 
 pending_events = {}
+
+application = ApplicationBuilder().token(BOT_TOKEN).build()
+application.add_handler(CommandHandler("mail", mail_command))
+application.add_handler(CallbackQueryHandler(mail_callback_handler, pattern="^(archive|defer):"))
 # ENV
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 CHAT_ID = 8011259706
@@ -298,13 +304,15 @@ async def todo_button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
                       headers={"Authorization": f"Bearer {TODOIST_API_TOKEN}"})
         await query.edit_message_text("✔️ Aufgabe als erledigt markiert.")
 
+nest_asyncio.apply()
+
 async def handle_startzeit(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.strip()
     try:
         time_parsed = parser.parse(text, fuzzy=True)
         now = datetime.now(pytz.timezone("Europe/Berlin"))
         start = now.replace(hour=time_parsed.hour, minute=time_parsed.minute, second=0, microsecond=0)
-        end = start + datetime.timedelta(minutes=60)
+        end = start + timedelta(minutes=60)
         task = context.user_data.pop("plan_task")
 
         creds = load_credentials()
@@ -335,31 +343,40 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await frage(update, context)
 
+async def morning_job(context: ContextTypes.DEFAULT_TYPE):
+    chat_id = 8011259706  # oder dynamisch
+    class FakeUpdate:
+        def __init__(self, bot, chat_id):
+            self.message = type("msg", (), {
+                "reply_text": lambda text: bot.send_message(chat_id, text),
+                "reply_markdown": lambda text, reply_markup=None: bot.send_message(chat_id, text, parse_mode="Markdown", reply_markup=reply_markup)
+            })()
+    update = FakeUpdate(context.bot, chat_id)
+    await mail_command(update, context)
+
 async def post_init(application):
     await asyncio.sleep(1)
     bot = application.bot
     scheduler = AsyncIOScheduler(timezone="Europe/Berlin")
     scheduler.add_job(send_morning_summary, 'cron', hour=6, minute=40, args=[bot])
     scheduler.add_job(send_evening_summary, 'cron', hour=19, minute=15, args=[bot])
+    scheduler.add_job(morning_job, CronTrigger(hour=7, minute=0))  # Mail-Check
     scheduler.start()
     print("✅ Scheduler gestartet.")
 
 async def setup_application() -> Application:
-    app = ApplicationBuilder().token(BOT_TOKEN).post_init(post_init).build()
+    app = Application.builder().token(BOT_TOKEN).post_init(post_init).build()
     await app.bot.delete_webhook(drop_pending_updates=True)
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("termin", termin))
     app.add_handler(CommandHandler("todo", todo))
     app.add_handler(CommandHandler("frage", frage))
+    app.add_handler(CommandHandler("mail", mail_command))
+    app.add_handler(CallbackQueryHandler(mail_callback_handler, pattern="^(archive|defer):"))
     app.add_handler(CallbackQueryHandler(todo_button_handler, pattern="^(plan|verschiebe|done)_"))
     app.add_handler(CallbackQueryHandler(button_handler))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
     return app
-    
-import nest_asyncio
-import asyncio
-
-nest_asyncio.apply()
 
 async def main():
     app = await setup_application()
@@ -367,4 +384,3 @@ async def main():
 
 if __name__ == '__main__':
     asyncio.run(main())
-
