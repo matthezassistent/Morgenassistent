@@ -202,13 +202,17 @@ async def setup_application():
     return app
 
 if __name__ == "__main__":
-    loop = asyncio.get_event_loop()
-    async def main():
+    import asyncio
+
+    async def run():
         print("✅ Bot wird gestartet...")
         app = await setup_application()
         await app.initialize()
         await app.start()
         print("✅ Läuft.")
         await asyncio.Event().wait()
-    loop.create_task(main())
-    loop.run_forever()
+
+    try:
+        asyncio.run(run())
+    except RuntimeError as e:
+        print("❌ Fehler beim Start:", e)
