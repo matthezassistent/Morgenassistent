@@ -378,14 +378,12 @@ async def setup_application() -> Application:
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
     return app
 
-async def main():
-    app = await setup_application()
-    await app.run_polling()
 
 if __name__ == "__main__":
     import asyncio
 
     async def runner():
+        print(\"✅ Bot gestartet – warte auf Nachrichten...\")
         app = await setup_application()
         await app.initialize()
         await app.start()
