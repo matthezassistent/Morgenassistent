@@ -100,7 +100,7 @@ def get_events_for_date(target_date):
     return events_all
     
 async def mail_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("ðŸ“¬ E-Mail-Ãœberblick kommt spÃ¤terâ€¦ (Platzhalter)")
+    await update.message.reply_text("📬 E-Mail-Überblick kommt später… (Platzhalter)")
 
 async def mail_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
