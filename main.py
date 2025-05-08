@@ -382,6 +382,13 @@ async def main():
     app = await setup_application()
     await app.run_polling()
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     import asyncio
-    asyncio.get_event_loop().run_until_complete(main())
+
+    async def runner():
+        app = await setup_application()
+        await app.initialize()
+        await app.start()
+        await asyncio.Event().wait()  # blockiere dauerhaft
+
+    asyncio.run(runner())
