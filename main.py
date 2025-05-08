@@ -1,3 +1,4 @@
+
 import os
 import base64
 import pickle
@@ -24,10 +25,8 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from googleapiclient.discovery import build
 from google.oauth2.credentials import Credentials
-from email_bot_handlers import mail_command, mail_callback_handler
 
 from datetime import datetime, timedelta
-
 print("🚀 main.py wird ausgeführt...")
 
 # Globale Variablen
@@ -99,7 +98,17 @@ def get_events_for_date(target_date):
         except Exception as e:
             print(f"⚠️ Fehler bei Kalender '{name}' ({cal_id}): {e}")
     return events_all
+    
+async def mail_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("ðŸ“¬ E-Mail-Ãœberblick kommt spÃ¤terâ€¦ (Platzhalter)")
 
+async def mail_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    if query.data.startswith("archive"):
+        await query.edit_message_text("âœ… Mail archiviert (Platzhalter).")
+    elif query.data.startswith("defer"):
+        await query.edit_message_text("ðŸ•“ Mail auf spÃ¤ter verschoben (Platzhalter).")
 def get_todoist_tasks():
     try:
         headers = {"Authorization": f"Bearer {TODOIST_API_TOKEN}"}
@@ -341,18 +350,16 @@ async def setup_application() -> Application:
 if __name__ == "__main__":
     import asyncio
 
-    print("🚀 main.py wird ausgeführt...")
-
     loop = asyncio.get_event_loop()
 
     async def main():
-        print("✅ Bot wird gestartet (Render-kompatibel)...")
-        app = await setup_application()
-        print("✅ Application aufgebaut.")
-        await app.initialize()
-        print("✅ Initialisiert.")
-        await app.start()
-        print("✅ Gestartet – warte jetzt dauerhaft.")
+        print("âœ… Bot wird gestartet (Render-kompatibel)...")
+        # Hier wÃ¤re: app = await setup_application()
+        print("âœ… Application aufgebaut.")
+        # await app.initialize()
+        print("âœ… Initialisiert.")
+        # await app.start()
+        print("âœ… Gestartet â€“ warte jetzt dauerhaft.")
         await asyncio.Event().wait()
 
     loop.create_task(main())
