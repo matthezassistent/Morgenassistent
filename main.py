@@ -7,7 +7,7 @@ from telegram.ext import Application, CommandHandler, ContextTypes
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
 # === Feature-Schalter ===
-USE_CALENDAR = True  # temporär deaktivieren
+USE_CALENDAR = False  # temporär deaktivieren
 USE_TODOIST = False
 USE_GPT = False
 USE_MAIL = False
