@@ -1,0 +1,48 @@
+import os
+import imaplib
+import email
+from email.header import decode_header
+from telegram import Update
+from telegram.ext import CommandHandler, ContextTypes
+
+MAIL_USER = os.getenv("MAIL_USER")
+MAIL_PASS = os.getenv("MAIL_PASS")
+MAIL_HOST = os.getenv("MAIL_HOST", "imap.gmail.com")
+
+def extract_subject(msg):
+    subject, encoding = decode_header(msg["Subject"])[0]
+    if isinstance(subject, bytes):
+        return subject.decode(encoding or "utf-8", errors="ignore")
+    return subject
+
+async def mail_check(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        imap = imaplib.IMAP4_SSL(MAIL_HOST)
+        imap.login(MAIL_USER, MAIL_PASS)
+        imap.select("INBOX")
+
+        status, messages = imap.search(None, '(UNSEEN)')
+        unseen_ids = messages[0].split()
+        results = []
+
+        for i in unseen_ids[:10]:
+            res, msg_data = imap.fetch(i, "(RFC822)")
+            for response_part in msg_data:
+                if isinstance(response_part, tuple):
+                    msg = email.message_from_bytes(response_part[1])
+                    from_ = msg.get("From")
+                    subject = extract_subject(msg)
+                    results.append(f"- {subject} ({from_})")
+
+        imap.logout()
+
+        if results:
+            await update.message.reply_text("Neue ungelesene Mails:\n" + "\n".join(results))
+        else:
+            await update.message.reply_text("Keine neuen ungelesenen Mails.")
+    except Exception as e:
+        await update.message.reply_text(f"Fehler beim Mailabruf: {e}")
+
+mail_handlers = [
+    CommandHandler("mailcheck", mail_check)
+]
