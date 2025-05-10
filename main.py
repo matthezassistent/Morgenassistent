@@ -2,7 +2,7 @@ import os
 import base64
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
-
+#
 # === ENV ===
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
