@@ -1,4 +1,5 @@
 import os
+import base64
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 
@@ -23,6 +24,16 @@ if USE_MAIL:
     from modules.mail_checker import mail_handlers
 if USE_SUMMARY:
     from modules.summary_scheduler import init_scheduler
+
+import base64
+
+# === token.pkl erzeugen, falls nötig ===
+if not os.path.exists("token.pkl"):
+    encoded_token = os.getenv("TOKEN_PKL_BASE64")
+    if encoded_token:
+        with open("token.pkl", "wb") as f:
+            f.write(base64.b64decode(encoded_token))
+        print("✅ token.pkl aus Umgebungsvariable erzeugt.")
 
 # === Basisbefehle ===
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
