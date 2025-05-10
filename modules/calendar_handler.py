@@ -1,53 +1,68 @@
-import datetime
-import pytz
-import pickle
+import os
 from telegram import Update
-from telegram.ext import CommandHandler, ContextTypes
-from googleapiclient.discovery import build
+from telegram.ext import Application, CommandHandler, ContextTypes
 
-# === Google Calendar Service laden ===
-def get_calendar_service():
-    with open("token.pkl", "rb") as token:
-        creds = pickle.load(token)
-    return build("calendar", "v3", credentials=creds)
+# === ENV ===
+BOT_TOKEN = os.getenv("BOT_TOKEN")
 
-# === Handlerfunktion für heute ===
-async def kalender_heute(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    tz = pytz.timezone("Europe/Berlin")
-    now = datetime.datetime.now(tz)
-    start_of_day = now.replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
-    end_of_day = now.replace(hour=23, minute=59, second=59, microsecond=999999).isoformat()
+# === Feature-Schalter ===
+USE_CALENDAR = False  # temporär deaktivieren
+USE_TODOIST = False
+USE_GPT = False
+USE_MAIL = False
+USE_SUMMARY = False
 
-    try:
-        service = get_calendar_service()
-        calendar_list = service.calendarList().list().execute()
-        events_output = []
+# === Dummy-Handler-Importe (nur wenn aktiviert) ===
+if USE_CALENDAR:
+    from modules.calendar_handler import calendar_handlers
+if USE_TODOIST:
+    from modules.todoist_handler import todoist_handlers
+if USE_GPT:
+    from modules.gpt_handler import gpt_handlers
+if USE_MAIL:
+    from modules.mail_checker import mail_handlers
+if USE_SUMMARY:
+    from modules.summary_scheduler import init_scheduler
 
-        for cal in calendar_list.get("items", []):
-            events_result = service.events().list(
-                calendarId=cal["id"],
-                timeMin=start_of_day,
-                timeMax=end_of_day,
-                singleEvents=True,
-                orderBy="startTime"
-            ).execute()
+# === Basisbefehle ===
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Hallo! Der Bot läuft modular.")
 
-            events = events_result.get("items", [])
-            if events:
-                events_output.append(f"**{cal.get('summary')}**:")
-                for event in events:
-                    start = event["start"].get("dateTime", event["start"].get("date"))
-                    title = event.get("summary", "(kein Titel)")
-                    events_output.append(f"  - {start}: {title}")
-        
-        if events_output:
-            await update.message.reply_text("\n".join(events_output))
-        else:
-            await update.message.reply_text("Heute stehen keine Termine an.")
-    except Exception as e:
-        await update.message.reply_text(f"Fehler beim Laden des Kalenders:\n{e}")
+async def ping(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("pong")
 
-# === Handlerliste ===
-calendar_handlers = [
-    CommandHandler("kalenderheute", kalender_heute)
-]
+# === Main Setup ===
+def main():
+    app = Application.builder().token(BOT_TOKEN).build()
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("ping", ping))
+
+    if USE_CALENDAR:
+        print("✅ Kalender-Modul wird geladen...")
+        for handler in calendar_handlers:
+            app.add_handler(handler)
+
+    if USE_TODOIST:
+        print("✅ Todoist-Modul wird geladen...")
+        for handler in todoist_handlers:
+            app.add_handler(handler)
+
+    if USE_GPT:
+        print("✅ GPT-Modul wird geladen...")
+        for handler in gpt_handlers:
+            app.add_handler(handler)
+
+    if USE_MAIL:
+        print("✅ Mail-Modul wird geladen...")
+        for handler in mail_handlers:
+            app.add_handler(handler)
+
+    if USE_SUMMARY:
+        print("✅ Scheduler wird initialisiert...")
+        init_scheduler(app)
+
+    print("✅ Starte run_polling()...")
+    app.run_polling()
+
+if __name__ == "__main__":
+    main()
