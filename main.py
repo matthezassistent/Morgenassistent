@@ -43,7 +43,9 @@ async def ping(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("pong")
 
 # === Main Setup ===
-def main():
+import asyncio
+
+async def main():
     app = Application.builder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("ping", ping))
@@ -73,7 +75,7 @@ def main():
         init_scheduler(app)
 
     print("✅ Starte run_polling()...")
-    app.run_polling()
+    await app.run_polling()  # <- await ist notwendig
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
