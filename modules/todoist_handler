@@ -1,3 +1,4 @@
+import os
 import datetime
 import requests
 from telegram import Update
@@ -6,6 +7,10 @@ from telegram.ext import CommandHandler, ContextTypes
 TODOIST_API_TOKEN = os.getenv("TODOIST_API_TOKEN")
 
 async def todo_heute(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not TODOIST_API_TOKEN:
+        await update.message.reply_text("❌ TODOIST_API_TOKEN fehlt in den Umgebungsvariablen.")
+        return
+
     today = datetime.date.today().isoformat()
 
     try:
@@ -15,12 +20,13 @@ async def todo_heute(update: Update, context: ContextTypes.DEFAULT_TYPE):
         response = requests.get("https://api.todoist.com/rest/v2/tasks", headers=headers)
 
         if response.status_code != 200:
-            await update.message.reply_text("Fehler beim Abrufen der Aufgaben.")
+            await update.message.reply_text(f"Fehler beim Abrufen der Aufgaben. Statuscode: {response.status_code}")
             return
 
         tasks = response.json()
         tasks_today = [
-            f"- {t['content']}" for t in tasks if t.get("due") and t["due"].get("date") == today
+            f"- {t['content']}" for t in tasks
+            if t.get("due") and t["due"].get("date") == today
         ]
 
         if tasks_today:
