@@ -1,12 +1,21 @@
 import datetime
 import pytz
 import pickle
+import os
+import base64
 from telegram import Update
 from telegram.ext import CommandHandler, ContextTypes
 from googleapiclient.discovery import build
 
 # === Google Calendar Service laden ===
 def get_calendar_service():
+    if not os.path.exists("token.pkl"):
+        encoded = os.getenv("TOKEN_PKL_BASE64")
+        if not encoded:
+            raise ValueError("TOKEN_PKL_BASE64 fehlt!")
+        with open("token.pkl", "wb") as f:
+            f.write(base64.b64decode(encoded))
+
     with open("token.pkl", "rb") as token:
         creds = pickle.load(token)
     return build("calendar", "v3", credentials=creds)
@@ -34,14 +43,14 @@ async def kalender_heute(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             events = events_result.get("items", [])
             if events:
-                events_output.append(f"**{cal.get('summary')}**:")
+                events_output.append(f"*{cal.get('summary')}*:")
                 for event in events:
                     start = event["start"].get("dateTime", event["start"].get("date"))
                     title = event.get("summary", "(kein Titel)")
                     events_output.append(f"  - {start}: {title}")
         
         if events_output:
-            await update.message.reply_text("\n".join(events_output))
+            await update.message.reply_text("\n".join(events_output), parse_mode="Markdown")
         else:
             await update.message.reply_text("Heute stehen keine Termine an.")
     except Exception as e:
