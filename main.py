@@ -1,5 +1,6 @@
 import os
 import base64
+from natural_question import natural_handlers
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 #
@@ -10,7 +11,7 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 USE_CALENDAR = True  # temporär deaktivieren
 USE_TODOIST = True
 USE_GPT = True
-USE_MAIL = false
+USE_MAIL = False
 USE_SUMMARY = True
 
 # === Dummy-Handler-Importe (nur wenn aktiviert) ===
@@ -50,6 +51,9 @@ async def main():
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("ping", ping))
 
+    for handler in natural_handlers:
+        app.add_handler(handler)
+    
     if USE_CALENDAR:
         print("✅ Kalender-Modul wird geladen...")
         for handler in calendar_handlers:
