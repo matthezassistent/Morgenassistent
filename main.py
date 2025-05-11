@@ -10,7 +10,7 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 USE_CALENDAR = True  # temporär deaktivieren
 USE_TODOIST = True
 USE_GPT = True
-USE_MAIL = True
+USE_MAIL = false
 USE_SUMMARY = True
 
 # === Dummy-Handler-Importe (nur wenn aktiviert) ===
