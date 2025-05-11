@@ -1,6 +1,7 @@
+import os
 import datetime
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
 import pytz
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 CHAT_ID = int(os.getenv("CHAT_ID", "8011259706"))
 
@@ -9,7 +10,9 @@ def init_scheduler(app):
 
     async def morning_summary():
         bot = app.bot
-        await bot.send_message(chat_id=CHAT_ID, text="⏰ Guten Morgen! (Platzhalter)")
+        now = datetime.datetime.now(pytz.timezone("Europe/Berlin"))
+        print(f"⏰ Sende Morgenzusammenfassung: {now}")
+        await bot.send_message(chat_id=CHAT_ID, text="⏰ Guten Morgen! Hier ist deine Tagesübersicht (Platzhalter).")
 
-    scheduler.add_job(morning_summary, trigger="cron", hour=14 minute=00)
+    scheduler.add_job(morning_summary, trigger="cron", hour=7, minute=0)
     scheduler.start()
