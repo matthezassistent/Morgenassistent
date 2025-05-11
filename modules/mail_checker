@@ -32,12 +32,15 @@ async def mail_check(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     msg = email.message_from_bytes(response_part[1])
                     from_ = msg.get("From")
                     subject = extract_subject(msg)
+                    if len(subject) > 80:
+                        subject = subject[:77] + "..."
                     results.append(f"- {subject} ({from_})")
 
         imap.logout()
 
         if results:
-            await update.message.reply_text("Neue ungelesene Mails:\n" + "\n".join(results))
+            reply = "Neue ungelesene Mails:\n" + "\n".join(results)
+            await update.message.reply_text(reply[:4000])
         else:
             await update.message.reply_text("Keine neuen ungelesenen Mails.")
     except Exception as e:
