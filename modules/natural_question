@@ -1,0 +1,37 @@
+from telegram import Update
+from telegram.ext import MessageHandler, ContextTypes, filters
+from dateparser.search import search_dates
+import datetime
+import pytz
+
+from kalendermodul import get_calendar_events  # ggf. Pfad anpassen
+
+async def global_frage(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_input = update.message.text
+    tz = pytz.timezone("Europe/Berlin")
+    parsed = search_dates(user_input, languages=["de"])
+
+    if not parsed:
+        return  # keine Antwort nötig
+
+    antworten = []
+
+    for _, dt in parsed:
+        dt = dt.astimezone(tz)
+        start = dt.replace(hour=0, minute=0, second=0, microsecond=0)
+        end = start + datetime.timedelta(days=1)
+        events = get_calendar_events(start, end)
+        if events:
+            antworten.append(
+                f"🗓️ Termine am {start.strftime('%A, %d.%m.%Y')}:\n" +
+                "\n".join([f"- {e['summary']}" for e in events])
+            )
+        else:
+            antworten.append(f"Keine Termine am {start.strftime('%d.%m.%Y')}.")
+
+    await update.message.reply_text("\n\n".join(antworten))
+
+# === Handlerliste ===
+natural_handlers = [
+    MessageHandler(filters.TEXT & ~filters.COMMAND, global_frage)
+]
