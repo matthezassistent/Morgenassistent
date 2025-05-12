@@ -1,85 +1,150 @@
 import os
+import asyncio
 import base64
-from natural_question import natural_handlers
-from telegram import Update
-from telegram.ext import Application, CommandHandler, ContextTypes
-#
+import pickle
+import datetime
+import pytz
+import requests
+
+from telegram import Update, Bot
+from telegram.ext import (
+    Application,
+    CommandHandler,
+    MessageHandler,
+    ContextTypes,
+    filters,
+)
+from googleapiclient.discovery import build
+from dateparser.search import search_dates
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+
 # === ENV ===
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-
-# === Feature-Schalter ===
-USE_CALENDAR = True  # temporär deaktivieren
-USE_TODOIST = True
-USE_GPT = True
-USE_MAIL = False
-USE_SUMMARY = True
-
-# === Dummy-Handler-Importe (nur wenn aktiviert) ===
-if USE_CALENDAR:
-    from modules.calendar_handler import calendar_handlers
-if USE_TODOIST:
-    from modules.todoist_handler import todoist_handlers
-if USE_GPT:
-    from modules.gpt_handler import gpt_handlers
-if USE_MAIL:
-    from modules.mail_checker import mail_handlers
-if USE_SUMMARY:
-    from modules.summary_scheduler import init_scheduler
-
-import base64
+CHAT_ID = int(os.getenv("CHAT_ID", "8011259706"))
+TOKEN_PKL_BASE64 = os.getenv("TOKEN_PKL_BASE64")
 
 # === token.pkl erzeugen, falls nötig ===
-if not os.path.exists("token.pkl"):
-    encoded_token = os.getenv("TOKEN_PKL_BASE64")
-    if encoded_token:
-        with open("token.pkl", "wb") as f:
-            f.write(base64.b64decode(encoded_token))
-        print("✅ token.pkl aus Umgebungsvariable erzeugt.")
+if not os.path.exists("token.pkl") and TOKEN_PKL_BASE64:
+    with open("token.pkl", "wb") as f:
+        f.write(base64.b64decode(TOKEN_PKL_BASE64))
+    print("✅ token.pkl aus Umgebungsvariable erzeugt.")
+
+# === Kalenderintegration ===
+def get_calendar_events(start, end):
+    with open("token.pkl", "rb") as token:
+        creds = pickle.load(token)
+    service = build("calendar", "v3", credentials=creds)
+
+    events_output = []
+    calendar_list = service.calendarList().list().execute()
+
+    for cal in calendar_list.get("items", []):
+        events_result = service.events().list(
+            calendarId=cal["id"],
+            timeMin=start.isoformat(),
+            timeMax=end.isoformat(),
+            singleEvents=True,
+            orderBy="startTime"
+        ).execute()
+
+        events = events_result.get("items", [])
+        for event in events:
+            title = event.get("summary", "(kein Titel)")
+            events_output.append({"summary": title})
+
+    return events_output
+
+async def kalender_heute(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    tz = pytz.timezone("Europe/Berlin")
+    now = datetime.datetime.now(tz)
+    start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    end = start + datetime.timedelta(days=1)
+
+    events = get_calendar_events(start, end)
+    if events:
+        msg = "🗓️ Termine heute:\n" + "\n".join([f"- {e['summary']}" for e in events])
+    else:
+        msg = "Heute stehen keine Termine im Kalender."
+
+    await update.message.reply_text(msg)
+
+async def global_frage(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_input = update.message.text
+    tz = pytz.timezone("Europe/Berlin")
+    parsed = search_dates(user_input, languages=["de"])
+
+    if not parsed:
+        return
+
+    antworten = []
+    for _, dt in parsed:
+        dt = dt.astimezone(tz)
+        start = dt.replace(hour=0, minute=0, second=0, microsecond=0)
+        end = start + datetime.timedelta(days=1)
+        events = get_calendar_events(start, end)
+        if events:
+            antworten.append(
+                f"🗓️ {start.strftime('%A, %d.%m.%Y')}:\n" +
+                "\n".join([f"- {e['summary']}" for e in events])
+            )
+        else:
+            antworten.append(f"Keine Termine am {start.strftime('%d.%m.%Y')}.")
+
+    await update.message.reply_text("\n\n".join(antworten))
+
+# === Tageszusammenfassungen ===
+def init_scheduler(app):
+    scheduler = AsyncIOScheduler(timezone="Europe/Berlin")
+
+    async def send_morning_summary():
+        tz = pytz.timezone("Europe/Berlin")
+        now = datetime.datetime.now(tz)
+        start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        end = start + datetime.timedelta(days=1)
+        events = get_calendar_events(start, end)
+        if events:
+            text = "Guten Morgen! Deine Termine heute:\n" + "\n".join([f"- {e['summary']}" for e in events])
+        else:
+            text = "Guten Morgen! Heute stehen keine Termine im Kalender."
+        await app.bot.send_message(chat_id=CHAT_ID, text=text)
+
+    async def send_evening_summary():
+        tz = pytz.timezone("Europe/Berlin")
+        now = datetime.datetime.now(tz)
+        start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        end = start + datetime.timedelta(days=1)
+        events = get_calendar_events(start, end)
+        if events:
+            text = "Guten Abend! Rückblick auf heute:\n" + "\n".join([f"- {e['summary']}" for e in events])
+        else:
+            text = "Guten Abend! Heute standen keine Termine im Kalender."
+        await app.bot.send_message(chat_id=CHAT_ID, text=text)
+
+    scheduler.add_job(send_morning_summary, trigger="cron", hour=7, minute=0)
+    scheduler.add_job(send_evening_summary, trigger="cron", hour=21, minute=0)
+    scheduler.start()
 
 # === Basisbefehle ===
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Hallo! Der Bot läuft modular.")
+    await update.message.reply_text("Hallo! Dein Assistent ist bereit.")
 
 async def ping(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("pong")
 
 # === Main Setup ===
-import asyncio
-
 async def main():
     app = Application.builder().token(BOT_TOKEN).build()
+    await app.bot.delete_webhook(drop_pending_updates=True)
+
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("ping", ping))
+    app.add_handler(CommandHandler("heutekalender", kalender_heute))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, global_frage))
 
-    for handler in natural_handlers:
-        app.add_handler(handler)
-    
-    if USE_CALENDAR:
-        print("✅ Kalender-Modul wird geladen...")
-        for handler in calendar_handlers:
-            app.add_handler(handler)
-
-    if USE_TODOIST:
-        print("✅ Todoist-Modul wird geladen...")
-        for handler in todoist_handlers:
-            app.add_handler(handler)
-
-    if USE_GPT:
-        print("✅ GPT-Modul wird geladen...")
-        for handler in gpt_handlers:
-            app.add_handler(handler)
-
-    if USE_MAIL:
-        print("✅ Mail-Modul wird geladen...")
-        for handler in mail_handlers:
-            app.add_handler(handler)
-
-    if USE_SUMMARY:
-        print("✅ Scheduler wird initialisiert...")
-        init_scheduler(app)
+    init_scheduler(app)
 
     print("✅ Starte run_polling()...")
-    await app.run_polling()  # <- await ist notwendig
+    await app.run_polling()
 
 if __name__ == "__main__":
     asyncio.run(main())
