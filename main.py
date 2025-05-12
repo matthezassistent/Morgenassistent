@@ -55,18 +55,24 @@ def get_calendar_events(start, end):
     return events_output
 
 async def kalender_heute(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    print("✅ /kalender empfangen")
+
     tz = pytz.timezone("Europe/Berlin")
     now = datetime.datetime.now(tz)
     start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     end = start + datetime.timedelta(days=1)
 
-    events = get_calendar_events(start, end)
-    if events:
-        msg = "🗓️ Termine heute:\n" + "\n".join([f"- {e['summary']}" for e in events])
-    else:
-        msg = "Heute stehen keine Termine im Kalender."
+    try:
+        events = get_calendar_events(start, end)
+        if events:
+            msg = "🗓️ Termine heute:\n" + "\n".join([f"- {e['summary']}" for e in events])
+        else:
+            msg = "Heute stehen keine Termine im Kalender."
+    except Exception as e:
+        msg = f"❌ Fehler beim Laden des Kalenders:\n{e}"
 
     await update.message.reply_text(msg)
+
 
 async def global_frage(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_input = update.message.text
@@ -126,10 +132,10 @@ def init_scheduler(app):
 
 # === Basisbefehle ===
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Hallo! Dein Assistent ist bereit.")
+    await update.message.reply_text("Hallo! Dein Assistent ist da.")
 
 async def ping(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("pong")
+    await update.message.reply_text("peng")
 
 # === Main Setup ===
 async def main():
@@ -138,7 +144,7 @@ async def main():
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("ping", ping))
-    app.add_handler(CommandHandler("heutekalender", kalender_heute))
+    app.add_handler(CommandHandler("kalender", kalender_heute))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, global_frage))
 
     init_scheduler(app)
