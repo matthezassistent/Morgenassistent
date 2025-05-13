@@ -271,8 +271,10 @@ def init_scheduler(app):
 
         await app.bot.send_message(chat_id=CHAT_ID, text=text)
 
-    scheduler.add_job(send_morning_summary, trigger="cron", hour=7, minute=0)
-    scheduler.add_job(send_evening_summary, trigger="cron", hour=21, minute=0)
+    scheduler.add_job(send_morning_summary, trigger="cron", hour=6, minute=30)
+    scheduler.add_job(send_morning_summary, trigger="cron", hour=7, minute=30)
+    scheduler.add_job(send_morning_summary, trigger="cron", hour=10, minute=0)
+    scheduler.add_job(send_evening_summary, trigger="cron", hour=15, minute=0)
     scheduler.start()
 # check mail
 
