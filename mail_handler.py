@@ -23,6 +23,12 @@ todoist = TodoistAPI(TODOIST_API_TOKEN)
 
 # === Hilfsfunktionen ===
 def list_threads(query: str) -> List[str]:
+    # Nur Nachrichten aus dem allgemeinen Posteingang ohne noreply
+    if "category:primary" not in query:
+        query += " category:primary"
+    if "-from:noreply" not in query:
+        query += " -from:noreply -from:no-reply"
+
     response = gmail.users().threads().list(userId='me', q=query).execute()
     return [t['id'] for t in response.get('threads', [])]
 
@@ -60,6 +66,20 @@ def is_unanswered(messages: List[dict]) -> bool:
 
     snippet_lower = snippet.lower()
 
+    # System-/Newsletter-Mails erkennen und ausschließen
+    newsletter_phrases = [
+        "to unsubscribe", "automated message", "you are receiving this", "no reply needed",
+        "nicht antworten", "automatisch generiert", "du erhältst diese nachricht", "abmelden",
+        "keine antwort erforderlich", "benachrichtigungseinstellungen", "email-einstellungen",
+        "ihre email wurde hinterlegt", "sie erhalten diese e-mail", "rufen sie das portal auf",
+        "please do not reply to this email", "chess.com customer support", "update your notification settings",
+        "this email was sent to", "download on the app store", "get it on google play",
+        "game in pgn format", "chess.com", "let's play", "link to game"
+    ]
+    for phrase in newsletter_phrases:
+        if phrase in snippet_lower:
+            return False
+
     # Prüfe, ob Mail von mir oder an mich
     is_sent_by_me = "SENT" in last_msg.get("labelIds", [])
     contains_question = any(kw in snippet_lower for kw in question_keywords)
@@ -80,7 +100,7 @@ def is_unanswered(messages: List[dict]) -> bool:
     return False
 
 def archive_old_emails():
-    old_threads = list_threads("older_than:7d label:inbox")
+    old_threads = list_threads("older_than:7d label:inbox category:primary -from:noreply -from:no-reply")
     for thread_id in old_threads:
         try:
             gmail.users().threads().modify(userId="me", id=thread_id, body={"removeLabelIds": ["INBOX"]}).execute()
@@ -92,7 +112,7 @@ async def check_mail_status() -> Tuple[str, List[dict]]:
     archive_old_emails()
 
     # Finde Threads der letzten 7 Tage
-    recent_threads = list_threads("newer_than:7d category:primary")
+    recent_threads = list_threads("newer_than:7d category:primary -from:noreply -from:no-reply")
     incoming_mails = []
     outgoing_mails = []
     summaries = []
@@ -113,13 +133,23 @@ async def check_mail_status() -> Tuple[str, List[dict]]:
                 incoming_mails.append({"subject": subject, "link": link})
 
     if incoming_mails or outgoing_mails:
-        summary = "📬 Es gibt unbeantwortete Mails:\n\n"
+        summary = "📬 Es gibt unbeantwortete Mails:
+
+"
         if incoming_mails:
-            summary += "📥 Eingehende Mails ohne Antwort:\n" + "\n".join(
-                [f"- {mail['subject']}\n🔗 {mail['link']}" for mail in incoming_mails]) + "\n\n"
+            summary += "📥 Eingehende Mails ohne Antwort:
+" + "
+".join(
+                [f"- {mail['subject']}
+🔗 {mail['link']}" for mail in incoming_mails]) + "
+
+"
         if outgoing_mails:
-            summary += "📤 Gesendete Mails ohne Rückmeldung:\n" + "\n".join(
-                [f"- {mail['subject']}\n🔗 {mail['link']}" for mail in outgoing_mails])
+            summary += "📤 Gesendete Mails ohne Rückmeldung:
+" + "
+".join(
+                [f"- {mail['subject']}
+🔗 {mail['link']}" for mail in outgoing_mails])
     else:
         summary = ""
 
