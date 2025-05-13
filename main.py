@@ -186,7 +186,7 @@ def get_relevant_tasks(start_date: datetime.date):
         relevant = []
         for task in tasks:
             due = task.get("due", {})
-            due_date_str = due.get("date")
+            due_date_str = due.get("date") if due else None
             if due_date_str:
                 try:
                     due_date = datetime.date.fromisoformat(due_date_str[:10])
