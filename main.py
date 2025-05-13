@@ -6,6 +6,7 @@ import datetime
 import pytz
 import requests
 
+from mail_handler import check_mail_status
 from telegram import Update, Bot
 from telegram.ext import (
     Application,
@@ -221,7 +222,20 @@ def init_scheduler(app):
 
         today = now.date()
         tasks = get_relevant_tasks(today)
-        text += "\n\n📝 Aufgaben heute:\n" + "\n".join(tasks)
+        if tasks:
+            text += "\n\n📝 Aufgaben heute:\n" + "\n".join(f"- {t}" for t in tasks)
+        else:
+            text += "\n\n📝 Heute stehen keine Aufgaben an."
+
+        # 📬 Mailstatus prüfen
+        from mail_handler import check_mail_status, create_mail_check_task
+
+        mail_summary, open_mails = await check_mail_status()
+        if mail_summary:
+            text += "\n\n" + mail_summary
+
+        if open_mails:
+            await create_mail_check_task(open_mails)
 
         await app.bot.send_message(chat_id=CHAT_ID, text=text)
 
