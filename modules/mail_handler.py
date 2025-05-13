@@ -1,17 +1,22 @@
 import datetime
 import base64
+import pickle
+import os
+from io import BytesIO
 from typing import List, Tuple
 from googleapiclient.discovery import build
 from google.oauth2.credentials import Credentials
 from todoist_api_python.api import TodoistAPI
 
 # === ENV & SETUP ===
-import os
-GMAIL_TOKEN = base64.b64decode(os.getenv("TOKEN_PKL_BASE64"))
+TOKEN_PKL_BASE64 = os.getenv("TOKEN_PKL_BASE64")
 TODOIST_API_TOKEN = os.getenv("TODOIST_API_TOKEN")
 
-# === Setup Services ===
-creds = Credentials.from_authorized_user_info(eval(GMAIL_TOKEN.decode()))
+if not TOKEN_PKL_BASE64:
+    raise RuntimeError("TOKEN_PKL_BASE64 nicht gesetzt")
+
+# === Load Gmail Credentials from token.pkl ===
+creds = pickle.load(BytesIO(base64.b64decode(TOKEN_PKL_BASE64)))
 gmail = build("gmail", "v1", credentials=creds)
 todoist = TodoistAPI(TODOIST_API_TOKEN)
 
@@ -34,18 +39,19 @@ def extract_subject(msg):
 def extract_snippet_link(msg_id: str) -> str:
     return f"https://mail.google.com/mail/u/0/#inbox/{msg_id}"
 
-
 def is_unanswered(messages: List[dict]) -> bool:
     if not messages:
         return False
     last_msg = messages[-1]
-    return not last_msg["labelIds"] or "SENT" not in last_msg["labelIds"]
-
+    return not last_msg.get("labelIds") or "SENT" not in last_msg.get("labelIds", [])
 
 def archive_old_emails():
     old_threads = list_threads("older_than:7d label:inbox")
     for thread_id in old_threads:
-        gmail.users().threads().modify(userId="me", id=thread_id, body={"removeLabelIds": ["INBOX"]}).execute()
+        try:
+            gmail.users().threads().modify(userId="me", id=thread_id, body={"removeLabelIds": ["INBOX"]}).execute()
+        except Exception as e:
+            print(f"⚠️ Fehler beim Archivieren von Thread {thread_id}: {e}")
 
 
 async def check_mail_status() -> Tuple[str, List[dict]]:
