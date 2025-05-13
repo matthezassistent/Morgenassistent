@@ -8,6 +8,8 @@ import requests
 
 from mail_handler import check_mail_status
 from telegram import Update, Bot
+from mail_handler import check_mail_status, create_mail_check_task
+
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -272,7 +274,20 @@ def init_scheduler(app):
     scheduler.add_job(send_morning_summary, trigger="cron", hour=7, minute=0)
     scheduler.add_job(send_evening_summary, trigger="cron", hour=21, minute=0)
     scheduler.start()
+# check mail
 
+async def mail_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("📬 Mail-Check läuft…")
+    summary, open_mails = await check_mail_status()
+
+    if summary:
+        await update.message.reply_text(summary)
+    else:
+        await update.message.reply_text("✅ Keine unbeantworteten Mails gefunden.")
+
+    if open_mails:
+        await create_mail_check_task(open_mails)
+        
 # === Basisbefehle ===
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Hallo! Dein Assistent ist da.")
@@ -288,6 +303,7 @@ async def setup_application():
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("ping", ping))
     app.add_handler(CommandHandler("kalender", kalender_heute))
+    app.add_handler(CommandHandler("mail", mail_command))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, global_frage))
 
     init_scheduler(app)
