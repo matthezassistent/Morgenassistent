@@ -151,8 +151,7 @@ async def setup_application():
     await app.initialize()
     await app.start()
     print("✅ Bot läuft auf Fly.io.")
-    await asyncio.Event().wait()  # läuft dauerhaft
-    return app
+    await asyncio.Event().wait()
 
 if __name__ == "__main__":
     asyncio.run(setup_application())
