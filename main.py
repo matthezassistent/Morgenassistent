@@ -73,7 +73,6 @@ async def kalender_heute(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(msg)
 
-
 async def global_frage(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_input = update.message.text
     tz = pytz.timezone("Europe/Berlin")
@@ -138,7 +137,7 @@ async def ping(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("peng")
 
 # === Main Setup ===
-async def main():
+async def setup_application():
     app = Application.builder().token(BOT_TOKEN).build()
     await app.bot.delete_webhook(drop_pending_updates=True)
 
@@ -149,9 +148,11 @@ async def main():
 
     init_scheduler(app)
 
-    print("✅ Starte run_polling()...")
-    await app.run_polling()
+    await app.initialize()
+    await app.start()
+    print("✅ Bot läuft auf Fly.io.")
+    await asyncio.Event().wait()  # läuft dauerhaft
+    return app
 
 if __name__ == "__main__":
-    asyncio.run(main())
-
+    asyncio.run(setup_application())
