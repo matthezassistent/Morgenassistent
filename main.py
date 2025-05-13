@@ -110,13 +110,14 @@ async def global_frage(update: Update, context: ContextTypes.DEFAULT_TYPE):
         end = start + datetime.timedelta(days=1)
         events = get_calendar_events(start, end)
 
+        tagestext = f"🗓️ {start.strftime('%A, %d.%m.%Y')}:\n"
+
         if events:
             grouped = {}
             for e in events:
                 cal = e.get("calendar", "Unbekannt")
                 grouped.setdefault(cal, []).append(e)
 
-            tagestext = f"🗓️ {start.strftime('%A, %d.%m.%Y')}:\n"
             for cal_name, evts in grouped.items():
                 tagestext += f"\n📘 {cal_name}:\n"
                 for e in evts:
@@ -124,10 +125,14 @@ async def global_frage(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     end_str = e['end'][11:16] if 'T' in e['end'] else ''
                     zeit = f"{start_str}-{end_str}" if start_str and end_str else "(ganztägig)"
                     tagestext += f"- {zeit} {e['summary']}\n"
-
-            antworten.append(tagestext)
         else:
-            antworten.append(f"Keine Termine am {start.strftime('%d.%m.%Y')}.")
+            tagestext += "Keine Termine.\n"
+
+        # 📌 Todoist-Aufgaben ergänzen
+        aufgaben = get_relevant_tasks(start.date())
+        tagestext += "\n📝 Aufgaben:\n" + "\n".join(aufgaben)
+
+        antworten.append(tagestext)
 
     await update.message.reply_text("\n\n".join(antworten))
 
