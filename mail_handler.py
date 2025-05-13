@@ -95,13 +95,12 @@ def is_unanswered(messages: List[dict]) -> bool:
     return False
 
 def archive_old_emails():
-    old_threads = list_threads("older_than:7d label:inbox category:primary -from:noreply -from:no-reply")
+    old_threads = list_threads("older_than:7d label:inbox")
     for thread_id in old_threads:
         try:
             gmail.users().threads().modify(userId="me", id=thread_id, body={"removeLabelIds": ["INBOX"]}).execute()
         except Exception as e:
             print(f"⚠️ Fehler beim Archivieren von Thread {thread_id}: {e}")
-
 
 async def check_mail_status() -> Tuple[str, List[dict]]:
     archive_old_emails()
