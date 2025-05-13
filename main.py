@@ -150,6 +150,8 @@ async def setup_application():
 
     await app.initialize()
     await app.start()
+    await app.updater.start_polling()
+    print("✅ Polling gestartet.")
     print("✅ Bot läuft auf Fly.io.")
     await asyncio.Event().wait()
 
