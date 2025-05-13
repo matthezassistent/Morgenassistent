@@ -111,11 +111,10 @@ def archive_old_emails():
 async def check_mail_status() -> Tuple[str, List[dict]]:
     archive_old_emails()
 
-    # Finde Threads der letzten 7 Tage
     recent_threads = list_threads("newer_than:7d category:primary -from:noreply -from:no-reply")
     incoming_mails = []
     outgoing_mails = []
-    summaries = []
+    summary = ""
 
     for thread_id in recent_threads:
         messages = get_thread_messages(thread_id)
@@ -133,27 +132,21 @@ async def check_mail_status() -> Tuple[str, List[dict]]:
                 incoming_mails.append({"subject": subject, "link": link})
 
     if incoming_mails or outgoing_mails:
-        summary = "📬 Es gibt unbeantwortete Mails:
+        summary = "📬 Es gibt unbeantwortete Mails:\n\n"
 
-"
         if incoming_mails:
-            summary += "📥 Eingehende Mails ohne Antwort:
-" + "
-".join(
-                [f"- {mail['subject']}
-🔗 {mail['link']}" for mail in incoming_mails]) + "
+            summary += "📥 Eingehende Mails ohne Antwort:\n"
+            for mail in incoming_mails:
+                summary += f"- {mail['subject']}\n🔗 {mail['link']}\n"
+            summary += "\n"
 
-"
         if outgoing_mails:
-            summary += "📤 Gesendete Mails ohne Rückmeldung:
-" + "
-".join(
-                [f"- {mail['subject']}
-🔗 {mail['link']}" for mail in outgoing_mails])
-    else:
-        summary = ""
+            summary += "📤 Gesendete Mails ohne Rückmeldung:\n"
+            for mail in outgoing_mails:
+                summary += f"- {mail['subject']}\n🔗 {mail['link']}\n"
 
     return summary, incoming_mails + outgoing_mails
+
 
 
 async def create_mail_check_task(open_mails: List[dict]):
