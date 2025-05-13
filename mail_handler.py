@@ -92,7 +92,7 @@ async def check_mail_status() -> Tuple[str, List[dict]]:
     archive_old_emails()
 
     # Finde Threads der letzten 7 Tage
-    recent_threads = list_threads("newer_than:7d")
+    recent_threads = list_threads("newer_than:7d category:primary")
     incoming_mails = []
     outgoing_mails = []
     summaries = []
