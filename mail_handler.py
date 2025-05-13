@@ -105,7 +105,7 @@ def archive_old_emails():
 
 async def check_mail_status() -> Tuple[str, List[dict]]:
     archive_old_emails()
-    recent_threads = list_threads("newer_than:7d category:primary -from:noreply -from:no-reply")
+    recent_threads = list_threads("newer_than:3d category:primary -from:noreply -from:no-reply")
     incoming_mails = []
     outgoing_mails = []
     summary = ""
