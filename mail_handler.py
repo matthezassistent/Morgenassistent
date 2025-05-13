@@ -42,8 +42,42 @@ def extract_snippet_link(msg_id: str) -> str:
 def is_unanswered(messages: List[dict]) -> bool:
     if not messages:
         return False
+
     last_msg = messages[-1]
-    return not last_msg.get("labelIds") or "SENT" not in last_msg.get("labelIds", [])
+    headers = last_msg.get("payload", {}).get("headers", [])
+    from_header = next((h["value"] for h in headers if h["name"].lower() == "from"), "")
+    snippet = last_msg.get("snippet", "")
+
+    # Multilinguale Frageindikatoren
+    question_keywords = [
+        # Deutsch
+        "?", "kannst du", "würden sie", "bitte", "könntest du", "was ist", "wann", "wie", "wo", "warum", "soll ich",
+        # Englisch
+        "can you", "could you", "please", "would you", "what is", "when", "how", "where", "why", "should I",
+        # Niederländisch
+        "kun je", "zou je", "alsjeblieft", "wat is", "wanneer", "hoe", "waar", "waarom", "moet ik"
+    ]
+
+    snippet_lower = snippet.lower()
+
+    # Prüfe, ob Mail von mir oder an mich
+    is_sent_by_me = "SENT" in last_msg.get("labelIds", [])
+    contains_question = any(kw in snippet_lower for kw in question_keywords)
+
+    # Fall 1: eingegangene Mail, nicht von mir, Frage enthalten
+    if not is_sent_by_me:
+        if "noreply" in from_header.lower() or "no-reply" in from_header.lower():
+            return False
+        return contains_question
+
+    # Fall 2: gesendete Mail, letzte Nachricht von mir → keine Antwort erhalten
+    if is_sent_by_me:
+        # Prüfe ob jemand anders nach mir geantwortet hat
+        # Wenn letzte Nachricht im Thread von mir ist, dann wurde evtl. nicht geantwortet
+        if len(messages) > 1 and messages[-1] == messages[-1]:
+            return contains_question
+
+    return False
 
 def archive_old_emails():
     old_threads = list_threads("older_than:7d label:inbox")
@@ -59,23 +93,47 @@ async def check_mail_status() -> Tuple[str, List[dict]]:
 
     # Finde Threads der letzten 7 Tage
     recent_threads = list_threads("newer_than:7d")
-    open_mails = []
+    incoming_mails = []
+    outgoing_mails = []
     summaries = []
 
     for thread_id in recent_threads:
         messages = get_thread_messages(thread_id)
-        if is_unanswered(messages):
-            subject = extract_subject(messages[-1])[:60]
-            link = extract_snippet_link(messages[-1]["id"])
-            open_mails.append({"subject": subject, "link": link})
-            summaries.append(f"- {subject}\n🔗 {link}")
+        if not messages:
+            continue
 
-    if open_mails:
-        summary = "📬 Es gibt unbeantwortete Mails:\n\n" + "\n".join(summaries)
+        last_msg = messages[-1]
+        subject = extract_subject(last_msg)[:60]
+        link = extract_snippet_link(last_msg["id"])
+
+        if is_unanswered(messages):
+            if "SENT" in last_msg.get("labelIds", []):
+                outgoing_mails.append({"subject": subject, "link": link})
+            else:
+                incoming_mails.append({"subject": subject, "link": link})
+
+    if incoming_mails or outgoing_mails:
+        summary = "📬 Es gibt unbeantwortete Mails:
+
+"
+        if incoming_mails:
+            summary += "📥 Eingehende Mails ohne Antwort:
+" + "
+".join(
+                [f"- {mail['subject']}
+🔗 {mail['link']}" for mail in incoming_mails]) + "
+
+"
+        if outgoing_mails:
+            summary += "📤 Gesendete Mails ohne Rückmeldung:
+" + "
+".join(
+                [f"- {mail['subject']}
+🔗 {mail['link']}" for mail in outgoing_mails])
     else:
         summary = ""
 
-    return summary, open_mails
+    return summary, incoming_mails + outgoing_mails
 
 
 async def create_mail_check_task(open_mails: List[dict]):
