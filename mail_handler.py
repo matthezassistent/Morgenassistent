@@ -62,14 +62,12 @@ def is_unanswered(messages: List[dict]) -> bool:
 
     newsletter_phrases = [
         "to unsubscribe", "google calendar", "event update", "termin wurde aktualisiert", "calendar invitation", "automated message", "you are receiving this", "no reply needed",
-        "nicht antworten", "automatisch generiert", "du erhältst diese nachricht", "abmelden", "github",
+        "nicht antworten", "automatisch generiert", "du erhältst diese nachricht", "abmelden", "gitpod",
         "keine antwort erforderlich", "benachrichtigungseinstellungen", "email-einstellungen",
         "ihre email wurde hinterlegt", "sie erhalten diese e-mail", "rufen sie das portal auf",
         "please do not reply to this email", "chess.com customer support", "update your notification settings",
         "this email was sent to", "download on the app store", "get it on google play",
-        "game in pgn format", "chess.com", "let's play", "link to game",
-        "ticket-id", "passwort reset", "pdf ist bereit", "csv ist bereit",
-        "aktualisierte einladung", "bestätige deine transaktion", "termin abgesagt",
+        "Game over w/", "passwort reset", "aktualisierte einladung", "bestätige deine transaktion", "termin abgesagt",
         "einladung", "livestream", "transaction", "support", "kundenservice",
         "dies ist keine antwortadresse", "kalendereinladung", "meeting invitation"
     ]
