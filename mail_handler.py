@@ -113,23 +113,13 @@ async def check_mail_status() -> Tuple[str, List[dict]]:
                 incoming_mails.append({"subject": subject, "link": link})
 
     if incoming_mails or outgoing_mails:
-        summary = "📬 Es gibt unbeantwortete Mails:
-
-"
+        summary = "📬 Es gibt unbeantwortete Mails:\n\n"
         if incoming_mails:
-            summary += "📥 Eingehende Mails ohne Antwort:
-" + "
-".join(
-                [f"- {mail['subject']}
-🔗 {mail['link']}" for mail in incoming_mails]) + "
-
-"
+            summary += "📥 Eingehende Mails ohne Antwort:\n" + "\n".join(
+                [f"- {mail['subject']}\n🔗 {mail['link']}" for mail in incoming_mails]) + "\n\n"
         if outgoing_mails:
-            summary += "📤 Gesendete Mails ohne Rückmeldung:
-" + "
-".join(
-                [f"- {mail['subject']}
-🔗 {mail['link']}" for mail in outgoing_mails])
+            summary += "📤 Gesendete Mails ohne Rückmeldung:\n" + "\n".join(
+                [f"- {mail['subject']}\n🔗 {mail['link']}" for mail in outgoing_mails])
     else:
         summary = ""
 
