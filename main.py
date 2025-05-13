@@ -30,6 +30,7 @@ if not os.path.exists("token.pkl") and TOKEN_PKL_BASE64:
     print("✅ token.pkl aus Umgebungsvariable erzeugt.")
 
 # === Kalenderintegration ===
+# === Kalenderintegration ===
 def get_calendar_events(start, end):
     with open("token.pkl", "rb") as token:
         creds = pickle.load(token)
@@ -39,6 +40,7 @@ def get_calendar_events(start, end):
     calendar_list = service.calendarList().list().execute()
 
     for cal in calendar_list.get("items", []):
+        cal_name = cal.get("summary", "(kein Name)")
         events_result = service.events().list(
             calendarId=cal["id"],
             timeMin=start.isoformat(),
@@ -50,7 +52,14 @@ def get_calendar_events(start, end):
         events = events_result.get("items", [])
         for event in events:
             title = event.get("summary", "(kein Titel)")
-            events_output.append({"summary": title})
+            start_time = event.get("start", {}).get("dateTime") or event.get("start", {}).get("date")
+            end_time = event.get("end", {}).get("dateTime") or event.get("end", {}).get("date")
+            events_output.append({
+                "summary": title,
+                "start": start_time,
+                "end": end_time,
+                "calendar": cal_name
+            })
 
     return events_output
 
@@ -65,13 +74,26 @@ async def kalender_heute(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         events = get_calendar_events(start, end)
         if events:
-            msg = "🗓️ Termine heute:\n" + "\n".join([f"- {e['summary']}" for e in events])
+            grouped = {}
+            for e in events:
+                cal = e.get("calendar", "Unbekannt")
+                grouped.setdefault(cal, []).append(e)
+
+            msg = f"🗓️ Termine heute ({start.strftime('%A, %d.%m.%Y')}):\n"
+            for cal_name, evts in grouped.items():
+                msg += f"\n📘 {cal_name}:\n"
+                for e in evts:
+                    start_str = e['start'][11:16] if 'T' in e['start'] else ''
+                    end_str = e['end'][11:16] if 'T' in e['end'] else ''
+                    zeit = f"{start_str}-{end_str}" if start_str and end_str else "(ganztägig)"
+                    msg += f"- {zeit} {e['summary']}\n"
         else:
             msg = "Heute stehen keine Termine im Kalender."
     except Exception as e:
         msg = f"❌ Fehler beim Laden des Kalenders:\n{e}"
 
     await update.message.reply_text(msg)
+
 
 async def global_frage(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_input = update.message.text
@@ -87,15 +109,94 @@ async def global_frage(update: Update, context: ContextTypes.DEFAULT_TYPE):
         start = dt.replace(hour=0, minute=0, second=0, microsecond=0)
         end = start + datetime.timedelta(days=1)
         events = get_calendar_events(start, end)
+
         if events:
-            antworten.append(
-                f"🗓️ {start.strftime('%A, %d.%m.%Y')}:\n" +
-                "\n".join([f"- {e['summary']}" for e in events])
-            )
+            grouped = {}
+            for e in events:
+                cal = e.get("calendar", "Unbekannt")
+                grouped.setdefault(cal, []).append(e)
+
+            tagestext = f"🗓️ {start.strftime('%A, %d.%m.%Y')}:\n"
+            for cal_name, evts in grouped.items():
+                tagestext += f"\n📘 {cal_name}:\n"
+                for e in evts:
+                    start_str = e['start'][11:16] if 'T' in e['start'] else ''
+                    end_str = e['end'][11:16] if 'T' in e['end'] else ''
+                    zeit = f"{start_str}-{end_str}" if start_str and end_str else "(ganztägig)"
+                    tagestext += f"- {zeit} {e['summary']}\n"
+
+            antworten.append(tagestext)
         else:
             antworten.append(f"Keine Termine am {start.strftime('%d.%m.%Y')}.")
 
     await update.message.reply_text("\n\n".join(antworten))
+
+# Todoist
+
+async def todo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    print("✅ /todo empfangen")
+
+    token = os.getenv("TODOIST_API_TOKEN")
+    if not token:
+        await update.message.reply_text("❌ Kein Todoist-Token gefunden.")
+        return
+
+    headers = {
+        "Authorization": f"Bearer {token}"
+    }
+
+    try:
+        response = requests.get("https://api.todoist.com/rest/v2/tasks", headers=headers)
+        response.raise_for_status()
+        tasks = response.json()
+
+        if not tasks:
+            msg = "✅ Keine offenen Aufgaben."
+        else:
+            msg = "📝 Offene Aufgaben:\n"
+            for task in tasks:
+                content = task.get("content", "(kein Titel)")
+                msg += f"- [ ] {content}\n"
+
+        await update.message.reply_text(msg)
+
+    except Exception as e:
+        await update.message.reply_text(f"❌ Fehler beim Abrufen der Aufgaben:\n{e}")
+        
+# todoist versammeln für update
+def get_relevant_tasks(start_date: datetime.date):
+    token = os.getenv("TODOIST_API_TOKEN")
+    if not token:
+        return ["❌ Kein Todoist-Token gefunden."]
+
+    headers = {
+        "Authorization": f"Bearer {token}"
+    }
+
+    try:
+        response = requests.get("https://api.todoist.com/rest/v2/tasks", headers=headers)
+        response.raise_for_status()
+        tasks = response.json()
+
+        relevant = []
+        for task in tasks:
+            due = task.get("due", {})
+            due_date_str = due.get("date")
+            if due_date_str:
+                try:
+                    due_date = datetime.date.fromisoformat(due_date_str[:10])
+                except ValueError:
+                    continue
+                if due_date != start_date:
+                    continue
+            content = task.get("content", "(kein Titel)")
+            relevant.append(f"- [ ] {content}")
+
+        return relevant if relevant else ["✅ Keine Aufgaben für diesen Tag."]
+
+    except Exception as e:
+        return [f"❌ Fehler beim Laden der Todoist-Aufgaben:\n{e}"]
+
 
 # === Tageszusammenfassungen ===
 def init_scheduler(app):
@@ -107,22 +208,46 @@ def init_scheduler(app):
         start = now.replace(hour=0, minute=0, second=0, microsecond=0)
         end = start + datetime.timedelta(days=1)
         events = get_calendar_events(start, end)
+
         if events:
             text = "Guten Morgen! Deine Termine heute:\n" + "\n".join([f"- {e['summary']}" for e in events])
         else:
             text = "Guten Morgen! Heute stehen keine Termine im Kalender."
+
+        today = now.date()
+        tasks = get_relevant_tasks(today)
+        text += "\n\n📝 Aufgaben heute:\n" + "\n".join(tasks)
+
         await app.bot.send_message(chat_id=CHAT_ID, text=text)
 
     async def send_evening_summary():
         tz = pytz.timezone("Europe/Berlin")
         now = datetime.datetime.now(tz)
-        start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        start = (now + datetime.timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
         end = start + datetime.timedelta(days=1)
         events = get_calendar_events(start, end)
+
         if events:
-            text = "Guten Abend! Rückblick auf heute:\n" + "\n".join([f"- {e['summary']}" for e in events])
+            grouped = {}
+            for e in events:
+                cal = e.get("calendar", "Unbekannt")
+                grouped.setdefault(cal, []).append(e)
+
+            text = f"🌙 Vorschau auf morgen ({start.strftime('%A, %d.%m.%Y')}):\n"
+            for cal_name, evts in grouped.items():
+                text += f"\n📘 {cal_name}:\n"
+                for e in evts:
+                    start_str = e['start'][11:16] if 'T' in e['start'] else ''
+                    end_str = e['end'][11:16] if 'T' in e['end'] else ''
+                    zeit = f"{start_str}-{end_str}" if start_str and end_str else "(ganztägig)"
+                    text += f"- {zeit} {e['summary']}\n"
         else:
-            text = "Guten Abend! Heute standen keine Termine im Kalender."
+            text = "🌙 Morgen stehen keine Termine im Kalender."
+
+        tomorrow = (now + datetime.timedelta(days=1)).date()
+        tasks = get_relevant_tasks(tomorrow)
+        text += "\n\n📝 Aufgaben morgen:\n" + "\n".join(tasks)
+
         await app.bot.send_message(chat_id=CHAT_ID, text=text)
 
     scheduler.add_job(send_morning_summary, trigger="cron", hour=7, minute=0)
