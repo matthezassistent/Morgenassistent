@@ -21,11 +21,12 @@ gmail = build("gmail", "v1", credentials=creds)
 todoist = TodoistAPI(TODOIST_API_TOKEN)
 
 
-def list_threads(query: str) -> List[str]:
-    if "category:primary" not in query:
-        query += " category:primary"
-    if "-from:noreply" not in query:
-        query += " -from:noreply -from:no-reply"
+def list_threads(query: str, strict: bool = False) -> List[str]:
+    if not strict:
+        if "category:primary" not in query:
+            query += " category:primary"
+        if "-from:noreply" not in query:
+            query += " -from:noreply -from:no-reply"
     response = gmail.users().threads().list(userId='me', q=query).execute()
     return [t['id'] for t in response.get('threads', [])]
 
@@ -67,7 +68,7 @@ def is_unanswered(messages: List[dict]) -> bool:
         "ihre email wurde hinterlegt", "sie erhalten diese e-mail", "rufen sie das portal auf",
         "please do not reply to this email", "chess.com customer support", "update your notification settings",
         "this email was sent to", "download on the app store", "get it on google play",
-        "Game over w/", "passwort reset", "aktualisierte einladung", "bestätige deine transaktion", "termin abgesagt",
+        "Game over", "passwort reset", "aktualisierte einladung", "bestätige deine transaktion", "termin abgesagt",
         "einladung", "livestream", "transaction", "support", "kundenservice",
         "dies ist keine antwortadresse", "kalendereinladung", "meeting invitation"
     ]
@@ -93,7 +94,7 @@ def is_unanswered(messages: List[dict]) -> bool:
     return False
 
 def archive_old_emails():
-    old_threads = list_threads("older_than:7d label:inbox")
+    old_threads = list_threads("older_than:7d label:inbox", strict=True)
     for thread_id in old_threads:
         try:
             gmail.users().threads().modify(userId="me", id=thread_id, body={"removeLabelIds": ["INBOX"]}).execute()
