@@ -61,8 +61,8 @@ def is_unanswered(messages: List[dict]) -> bool:
     from_header_lower = from_header.lower()
 
     newsletter_phrases = [
-        "to unsubscribe", "automated message", "you are receiving this", "no reply needed",
-        "nicht antworten", "automatisch generiert", "du erhältst diese nachricht", "abmelden",
+        "to unsubscribe", "google calendar", "event update", "termin wurde aktualisiert", "calendar invitation", "automated message", "you are receiving this", "no reply needed",
+        "nicht antworten", "automatisch generiert", "du erhältst diese nachricht", "abmelden", "github",
         "keine antwort erforderlich", "benachrichtigungseinstellungen", "email-einstellungen",
         "ihre email wurde hinterlegt", "sie erhalten diese e-mail", "rufen sie das portal auf",
         "please do not reply to this email", "chess.com customer support", "update your notification settings",
@@ -78,7 +78,7 @@ def is_unanswered(messages: List[dict]) -> bool:
             print(f"🛑 Gefiltert durch Stichwort '{phrase}' im Snippet: {snippet_lower[:100]}")
             return False
 
-    if any(service in from_header_lower for service in ["calendar", "no-reply", "noreply", "donotreply"]):
+    if any(service in from_header_lower for service in ["calendar", "google", "no-reply", "noreply", "donotreply"]):
         print(f"🛑 Gefiltert durch Absender '{from_header_lower}'")
         return False
 
