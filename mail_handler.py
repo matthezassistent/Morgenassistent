@@ -141,9 +141,9 @@ async def check_mail_status() -> Tuple[str, List[dict]]:
 
 
 async def create_mail_check_task(open_mails: List[dict]):
-    content = "📬 Offene Mails prüfen (letzte 7 Tage)\n\n"
-    for mail in open_mails:
-        content += f"– {mail['subject']}\n🔗 {mail['link']}\n"
+    if not open_mails:
+        return
 
+    content = "📬 Es gibt unbeantwortete E-Mails, bitte prüfen."
     due_date = datetime.date.today().isoformat()
     todoist.add_task(content=content, due_date=due_date, priority=3)
