@@ -6,9 +6,8 @@ import datetime
 import pytz
 import requests
 
-from mail_handler import check_mail_status
-from telegram import Update, Bot
 from mail_handler import check_mail_status, create_mail_check_task
+from telegram import Update, Bot
 from typing import List, Tuple
 from telegram.ext import (
     Application,
