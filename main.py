@@ -207,27 +207,45 @@ def get_relevant_tasks(start_date: datetime.date):
 
 
 # === Tageszusammenfassungen ===
-def init_scheduler(app):
-    scheduler = AsyncIOScheduler(timezone="Europe/Berlin")
+async def send_morning_summary():
+    tz = pytz.timezone("Europe/Berlin")
+    now = datetime.datetime.now(tz)
+    start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    end = start + datetime.timedelta(days=1)
 
-    async def send_morning_summary():
-        tz = pytz.timezone("Europe/Berlin")
-        now = datetime.datetime.now(tz)
-        start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-        end = start + datetime.timedelta(days=1)
+    try:
         events = get_calendar_events(start, end)
 
         if events:
-            text = "Guten Morgen! Deine Termine heute:\n" + "\n".join([f"- {e['summary']}" for e in events])
+            grouped = {}
+            for e in events:
+                cal = e.get("calendar", "Unbekannt")
+                grouped.setdefault(cal, []).append(e)
+
+            text = f"Guten Morgen! Deine Termine heute ({start.strftime('%A, %d.%m.%Y')}):\n"
+            for cal_name, evts in grouped.items():
+                text += f"\n📅 {cal_name}:\n"
+                for e in evts:
+                    start_str = e['start'][11:16] if 'T' in e['start'] else ''
+                    end_str = e['end'][11:16] if 'T' in e['end'] else ''
+                    zeit = f"{start_str}-{end_str}" if start_str and end_str else "(ganztägig)"
+                    text += f"- {zeit} {e['summary']}\n"
         else:
             text = "Guten Morgen! Heute stehen keine Termine im Kalender."
 
-        today = now.date()
-        tasks = get_relevant_tasks(today)
-        if tasks:
-            text += "\n\n📝 Aufgaben heute:\n" + "\n".join(f"- {t}" for t in tasks)
-        else:
-            text += "\n\n📝 Heute stehen keine Aufgaben an."
+    except Exception as e:
+        text = f"❌ Fehler beim Laden des Kalenders:\n{e}"
+
+    # Aufgaben
+    today = now.date()
+    tasks = get_relevant_tasks(today)
+    if tasks:
+        text += "\n\n📝 Aufgaben heute:\n" + "\n".join(f"- {t}" for t in tasks)
+    else:
+        text += "\n\n📝 Heute stehen keine Aufgaben an."
+
+    # Versand oder Rückgabe
+    await app.bot.send_message(chat_id=CHAT_ID, text=text)
 
         # 📬 Mailstatus prüfen
         from mail_handler import check_mail_status, create_mail_check_task
