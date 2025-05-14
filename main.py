@@ -243,54 +243,15 @@ async def send_morning_summary():
     else:
         text += "\n\n📝 Heute stehen keine Aufgaben an."
 
-    # Versand oder Rückgabe
+    # 📬 Mailstatus prüfen
+    mail_summary, open_mails = await check_mail_status()
+    if mail_summary:
+        text += "\n\n" + mail_summary
+    if open_mails:
+        await create_mail_check_task(open_mails)
+
+    # Nur EINE Nachricht versenden
     await app.bot.send_message(chat_id=CHAT_ID, text=text)
-
-        # 📬 Mailstatus prüfen
-        mail_summary, open_mails = await check_mail_status()
-        if mail_summary:
-            text += "\n\n" + mail_summary
-
-        if open_mails:
-            await create_mail_check_task(open_mails)
-
-        await app.bot.send_message(chat_id=CHAT_ID, text=text)
-
-    async def send_evening_summary():
-        tz = pytz.timezone("Europe/Berlin")
-        now = datetime.datetime.now(tz)
-        start = (now + datetime.timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
-        end = start + datetime.timedelta(days=1)
-        events = get_calendar_events(start, end)
-
-        if events:
-            grouped = {}
-            for e in events:
-                cal = e.get("calendar", "Unbekannt")
-                grouped.setdefault(cal, []).append(e)
-
-            text = f"🌙 Vorschau auf morgen ({start.strftime('%A, %d.%m.%Y')}):\n"
-            for cal_name, evts in grouped.items():
-                text += f"\n📘 {cal_name}:\n"
-                for e in evts:
-                    start_str = e['start'][11:16] if 'T' in e['start'] else ''
-                    end_str = e['end'][11:16] if 'T' in e['end'] else ''
-                    zeit = f"{start_str}-{end_str}" if start_str and end_str else "(ganztägig)"
-                    text += f"- {zeit} {e['summary']}\n"
-        else:
-            text = "🌙 Morgen stehen keine Termine im Kalender."
-
-        tomorrow = (now + datetime.timedelta(days=1)).date()
-        tasks = get_relevant_tasks(tomorrow)
-        text += "\n\n📝 Aufgaben morgen:\n" + "\n".join(tasks)
-
-        await app.bot.send_message(chat_id=CHAT_ID, text=text)
-
-    scheduler.add_job(send_morning_summary, trigger="cron", hour=6, minute=30)
-    scheduler.add_job(send_morning_summary, trigger="cron", hour=7, minute=30)
-    scheduler.add_job(send_morning_summary, trigger="cron", hour=10, minute=0)
-    scheduler.add_job(send_evening_summary, trigger="cron", hour=15, minute=0)
-    scheduler.start()
 # check mail
 
 async def mail_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
