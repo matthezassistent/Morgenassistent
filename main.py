@@ -296,6 +296,13 @@ def init_scheduler(app):
     scheduler.add_job(send_evening_summary, trigger="cron", hour=16, minute=0)
     scheduler.start()
 
+async def mail_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    summary, open_mails = await check_mail_status()
+    if summary:
+        await update.message.reply_text(summary)
+    else:
+        await update.message.reply_text("📭 Keine unbeantworteten Mails gefunden.")
+
 # === Basisbefehle ===
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Hallo! Dein Assistent ist da.")
