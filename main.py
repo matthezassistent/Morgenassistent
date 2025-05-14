@@ -206,66 +206,96 @@ def get_relevant_tasks(start_date: datetime.date):
 
 
 # === Tageszusammenfassungen ===
-async def send_morning_summary():
-    tz = pytz.timezone("Europe/Berlin")
-    now = datetime.datetime.now(tz)
-    start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    end = start + datetime.timedelta(days=1)
+def init_scheduler(app):
+    scheduler = AsyncIOScheduler(timezone="Europe/Berlin")
 
-    try:
+    async def send_morning_summary():
+        tz = pytz.timezone("Europe/Berlin")
+        now = datetime.datetime.now(tz)
+        start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        end = start + datetime.timedelta(days=1)
+
+        try:
+            events = get_calendar_events(start, end)
+
+            if events:
+                grouped = {}
+                for e in events:
+                    cal = e.get("calendar", "Unbekannt")
+                    grouped.setdefault(cal, []).append(e)
+
+                text = f"Guten Morgen! Deine Termine heute ({start.strftime('%A, %d.%m.%Y')}):\n"
+                for cal_name, evts in grouped.items():
+                    text += f"\n📅 {cal_name}:\n"
+                    for e in evts:
+                        start_str = e['start'][11:16] if 'T' in e['start'] else ''
+                        end_str = e['end'][11:16] if 'T' in e['end'] else ''
+                        zeit = f"{start_str}-{end_str}" if start_str and end_str else "(ganztägig)"
+                        text += f"- {zeit} {e['summary']}\n"
+            else:
+                text = "Guten Morgen! Heute stehen keine Termine im Kalender."
+
+        except Exception as e:
+            text = f"❌ Fehler beim Laden des Kalenders:\n{e}"
+
+        # Aufgaben
+        today = now.date()
+        tasks = get_relevant_tasks(today)
+        if tasks:
+            text += "\n\n📝 Aufgaben heute:\n" + "\n".join(f"- {t}" for t in tasks)
+        else:
+            text += "\n\n📝 Heute stehen keine Aufgaben an."
+
+        # Mailstatus prüfen
+        mail_summary, open_mails = await check_mail_status()
+        if mail_summary:
+            text += "\n\n" + mail_summary
+        if open_mails:
+            await create_mail_check_task(open_mails)
+
+        # Nachricht senden
+        await app.bot.send_message(chat_id=CHAT_ID, text=text)
+
+    async def send_evening_summary():
+        tz = pytz.timezone("Europe/Berlin")
+        now = datetime.datetime.now(tz)
+        start = (now + datetime.timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+        end = start + datetime.timedelta(days=1)
+
         events = get_calendar_events(start, end)
-
         if events:
             grouped = {}
             for e in events:
                 cal = e.get("calendar", "Unbekannt")
                 grouped.setdefault(cal, []).append(e)
 
-            text = f"Guten Morgen! Deine Termine heute ({start.strftime('%A, %d.%m.%Y')}):\n"
+            text = f"🌙 Vorschau auf morgen ({start.strftime('%A, %d.%m.%Y')}):\n"
             for cal_name, evts in grouped.items():
-                text += f"\n📅 {cal_name}:\n"
+                text += f"\n📘 {cal_name}:\n"
                 for e in evts:
                     start_str = e['start'][11:16] if 'T' in e['start'] else ''
                     end_str = e['end'][11:16] if 'T' in e['end'] else ''
                     zeit = f"{start_str}-{end_str}" if start_str and end_str else "(ganztägig)"
                     text += f"- {zeit} {e['summary']}\n"
         else:
-            text = "Guten Morgen! Heute stehen keine Termine im Kalender."
+            text = "🌙 Morgen stehen keine Termine im Kalender."
 
-    except Exception as e:
-        text = f"❌ Fehler beim Laden des Kalenders:\n{e}"
+        tomorrow = (now + datetime.timedelta(days=1)).date()
+        tasks = get_relevant_tasks(tomorrow)
+        if tasks:
+            text += "\n\n📝 Aufgaben morgen:\n" + "\n".join(f"- {t}" for t in tasks)
+        else:
+            text += "\n\n📝 Morgen stehen keine Aufgaben an."
 
-    # Aufgaben
-    today = now.date()
-    tasks = get_relevant_tasks(today)
-    if tasks:
-        text += "\n\n📝 Aufgaben heute:\n" + "\n".join(f"- {t}" for t in tasks)
-    else:
-        text += "\n\n📝 Heute stehen keine Aufgaben an."
+        await app.bot.send_message(chat_id=CHAT_ID, text=text)
 
-    # 📬 Mailstatus prüfen
-    mail_summary, open_mails = await check_mail_status()
-    if mail_summary:
-        text += "\n\n" + mail_summary
-    if open_mails:
-        await create_mail_check_task(open_mails)
+    # Scheduler-Jobs
+    scheduler.add_job(send_morning_summary, trigger="cron", hour=6, minute=30)
+    scheduler.add_job(send_morning_summary, trigger="cron", hour=7, minute=30)
+    scheduler.add_job(send_morning_summary, trigger="cron", hour=10, minute=0)
+    scheduler.add_job(send_evening_summary, trigger="cron", hour=16, minute=0)
+    scheduler.start()
 
-    # Nur EINE Nachricht versenden
-    await app.bot.send_message(chat_id=CHAT_ID, text=text)
-# check mail
-
-async def mail_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("📬 Mail-Check läuft…")
-    summary, open_mails = await check_mail_status()
-
-    if summary:
-        await update.message.reply_text(summary)
-    else:
-        await update.message.reply_text("✅ Keine unbeantworteten Mails gefunden.")
-
-    if open_mails:
-        await create_mail_check_task(open_mails)
-        
 # === Basisbefehle ===
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Hallo! Dein Assistent ist da.")
