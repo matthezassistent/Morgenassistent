@@ -247,8 +247,6 @@ async def send_morning_summary():
     await app.bot.send_message(chat_id=CHAT_ID, text=text)
 
         # 📬 Mailstatus prüfen
-        from mail_handler import check_mail_status, create_mail_check_task
-
         mail_summary, open_mails = await check_mail_status()
         if mail_summary:
             text += "\n\n" + mail_summary
