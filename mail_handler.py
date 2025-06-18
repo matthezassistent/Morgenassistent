@@ -146,4 +146,4 @@ async def create_mail_check_task(open_mails: List[dict]):
 
     content = "📬 Es gibt unbeantwortete E-Mails, bitte prüfen."
     due_date = datetime.date.today().isoformat()
-    todoist.add_task(content=content, due_date=due_date, priority=3)
+    #todoist.add_task(content=content, due_date=due_date, priority=3)
