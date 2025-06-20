@@ -7,6 +7,7 @@ import pytz
 import requests
 
 from mail_handler import check_mail_status, create_mail_check_task
+from apscheduler.triggers.cron import CronTrigger
 from telegram import Update, Bot
 from typing import List, Tuple
 from telegram.ext import (
