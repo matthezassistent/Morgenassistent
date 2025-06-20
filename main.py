@@ -210,10 +210,10 @@ def get_relevant_tasks(start_date: datetime.date):
 
 async def ripple_sec_news_check():
     prompt = (
-        "Was gibt es Neues im Rechtsstreit zwischen Ripple und der SEC? "
-        "Bitte nur relevante, neue Entwicklungen der letzten 6–12 Stunden. "
-        "Wie ist der letzte Kurs von XRP in USD"
-        "Gebe auch Kurse von HBAR, SOL, BTC, ETH in USD"
+        "Was gibt es Neues im Rechtsstreit zwischen Ripple und der SEC? " +
+        "Bitte nur relevante, neue Entwicklungen der letzten 6–12 Stunden. " +
+        "Wie ist der letzte Kurs von XRP in USD" +
+        "Gebe auch Kurse von HBAR, SOL, BTC, ETH in USD" +
         "Wenn es nichts Relevantes gibt, antworte genau mit: 'Keine relevanten Updates.'"
     )
 
