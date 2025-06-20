@@ -282,7 +282,7 @@ def init_scheduler(app):
             name=f"Ripple SEC News {hour}h"
         )
 
-    scheduler.start()
+    #scheduler.start()
     async def send_morning_summary():
         tz = pytz.timezone("Europe/Berlin")
         now = datetime.datetime.now(tz)
