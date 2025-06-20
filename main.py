@@ -20,6 +20,9 @@ from telegram.ext import (
 from googleapiclient.discovery import build
 from dateparser.search import search_dates
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from openai import AsyncOpenAI
+
+client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 # === ENV ===
 BOT_TOKEN = os.getenv("BOT_TOKEN")
