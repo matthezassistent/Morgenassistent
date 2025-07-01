@@ -208,12 +208,34 @@ def get_relevant_tasks(start_date: datetime.date):
     except Exception as e:
         return [f"❌ Fehler beim Laden der Todoist-Aufgaben:\n{e}"]
 
+import datetime
+import requests
+
 async def ripple_sec_news_check():
+    # 📆 Dynamisches Datum/Zeit
+    now = datetime.datetime.now().strftime("%d.%m.%Y, %H:%M")
+
+    # 📊 Hole Live-Preise von CoinGecko
+    try:
+        price_response = requests.get(
+            "https://api.coingecko.com/api/v3/simple/price",
+            params={"ids": "ripple,hedera-hashgraph,solana,bitcoin,ethereum", "vs_currencies": "usd"}
+        )
+        prices = price_response.json()
+        preis_xrp = prices["ripple"]["usd"]
+        preis_hbar = prices["hedera-hashgraph"]["usd"]
+        preis_sol = prices["solana"]["usd"]
+        preis_btc = prices["bitcoin"]["usd"]
+        preis_eth = prices["ethereum"]["usd"]
+    except Exception as e:
+        print("Fehler beim Abrufen der Preise:", e)
+        return
+
+    # 🧠 GPT-News-Zusammenfassung
     prompt = (
-        "Gibt es neue Nachrichten zu XRP oder Ripple?" +
-        "Bitte nur relevante, neue Entwicklungen von heute oder gestern. " +
-        "Wie ist der letzte Kurs von XRP in USD" +
-        "Gebe auch Kurse von HBAR, SOL, BTC, ETH in USD"
+        "Was gibt es Neues im Rechtsstreit zwischen Ripple (XRP) und der SEC? "
+        "Nur relevante Entwicklungen der letzten 12–24 Stunden. "
+        "Wenn nichts Relevantes, antworte exakt: 'Keine relevanten Updates.'"
     )
 
     try:
@@ -226,54 +248,25 @@ async def ripple_sec_news_check():
             temperature=0.3,
             max_tokens=400,
         )
-
         update = response.choices[0].message.content.strip()
-
-        if "Keine relevanten Updates" not in update:
-            await send_telegram_message(
-                f"📢 *Ripple vs. SEC Update* ({datetime.datetime.now().strftime('%H:%M')}):\n\n{update}"
-            )
     except Exception as e:
-        print("Fehler beim Abrufen von Ripple-News:", e)
+        print("Fehler bei GPT-Antwort:", e)
+        return
 
-async def send_telegram_message(text: str):
-    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-    payload = {
-        "chat_id": TELEGRAM_CHAT_ID,
-        "text": text,
-        "parse_mode": "Markdown"
-    }
-
-    async with aiohttp.ClientSession() as session:
-        async with session.post(url, data=payload) as resp:
-            if resp.status != 200:
-                print(f"Telegram-Fehler: {resp.status}")
-                print(await resp.text())
-
-async def xrp_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    prompt = (
-        "Was gibt es Neues im Rechtsstreit zwischen Ripple und der SEC? "
-        "Bitte gib mir nur wirklich relevante, neue Entwicklungen der letzten 6–12 Stunden. "
-        "Fasse es in maximal 5 Sätzen zusammen. Wenn es nichts Neues gibt, schreibe: 'Keine relevanten Updates.'"
+    # 📲 Telegram-Nachricht formatieren
+    message = (
+        f"📢 *Ripple & XRP Update – {now}*\n\n"
+        f"- *Kurs:* XRP bei {preis_xrp} USD\n"
+        f"- *News:* {update}\n\n"
+        "🪙 *Weitere Kurse:*\n"
+        f"- HBAR: {preis_hbar} USD\n"
+        f"- SOL: {preis_sol} USD\n"
+        f"- BTC: {preis_btc} USD\n"
+        f"- ETH: {preis_eth} USD"
     )
 
-    try:
-        response = await client.chat.completions.create(
-            model="gpt-4",
-            messages=[
-                {"role": "system", "content": "Du bist ein sachlicher Nachrichten-Assistent."},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.3,
-            max_tokens=400,
-        )
-
-        result = response.choices[0].message.content.strip()
-        await update.message.reply_text(f"📢 *Ripple vs. SEC Update:*\n\n{result}", parse_mode="Markdown")
-
-    except Exception as e:
-        await update.message.reply_text("❌ Fehler beim Abrufen der News.")
-        print("Fehler bei /xrp:", e)
+    if "Keine relevanten Updates" not in update:
+        await send_telegram_message(message)
 
 # === Tageszusammenfassungen ===
 def init_scheduler(app):
