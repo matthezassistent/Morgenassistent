@@ -268,6 +268,64 @@ async def ripple_sec_news_check():
     if "Keine relevanten Updates" not in update:
         await send_telegram_message(message)
 
+from telegram import Update
+from telegram.ext import ContextTypes
+
+async def xrp_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    now = datetime.datetime.now().strftime("%d.%m.%Y, %H:%M")
+
+    # Preise abrufen
+    try:
+        price_response = requests.get(
+            "https://api.coingecko.com/api/v3/simple/price",
+            params={"ids": "ripple,hedera-hashgraph,solana,bitcoin,ethereum", "vs_currencies": "usd"}
+        )
+        prices = price_response.json()
+        preis_xrp = prices["ripple"]["usd"]
+        preis_hbar = prices["hedera-hashgraph"]["usd"]
+        preis_sol = prices["solana"]["usd"]
+        preis_btc = prices["bitcoin"]["usd"]
+        preis_eth = prices["ethereum"]["usd"]
+    except Exception as e:
+        await update.message.reply_text("Fehler beim Abrufen der Preise.")
+        return
+
+    # GPT-Antwort holen
+    prompt = (
+        "Gibt es neue Nachrichten zu XRP oder Ripple? "
+        "Nur relevante Entwicklungen der letzten 12–24 Stunden. "
+        "Wenn nichts Relevantes, antworte exakt: 'Keine relevanten Updates.'"
+    )
+
+    try:
+        response = await client.chat.completions.create(
+            model="gpt-4",
+            messages=[
+                {"role": "system", "content": "Du bist ein sachlicher Nachrichten-Assistent."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.3,
+            max_tokens=400,
+        )
+        update_text = response.choices[0].message.content.strip()
+    except Exception as e:
+        await update.message.reply_text("Fehler beim Abrufen der News.")
+        return
+
+    # Antwort zusammenbauen
+    text = (
+        f"📢 *Ripple & XRP Update – {now}*\n\n"
+        f"- *Kurs:* XRP bei {preis_xrp} USD\n"
+        f"- *News:* {update_text}\n\n"
+        f"🪙 *Weitere Kurse:*\n"
+        f"- HBAR: {preis_hbar} USD\n"
+        f"- SOL: {preis_sol} USD\n"
+        f"- BTC: {preis_btc} USD\n"
+        f"- ETH: {preis_eth} USD"
+    )
+
+    await update.message.reply_text(text, parse_mode="Markdown")
+
 # === Tageszusammenfassungen ===
 def init_scheduler(app):
     scheduler = AsyncIOScheduler(timezone="Europe/Berlin")
